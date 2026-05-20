@@ -33,6 +33,8 @@ export function getProductFilters(query) {
     precio_min: toNumber(query.precio_min),
     precio_max: toNumber(query.precio_max),
     anio: toNumber(query.anio),
+    anio_min: toNumber(query.anio_min),
+    anio_max: toNumber(query.anio_max),
     destacado: toBoolean(query.destacado),
     search: toTrimmedString(query.search),
   };

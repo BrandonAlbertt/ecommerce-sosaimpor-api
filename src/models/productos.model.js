@@ -45,6 +45,16 @@ export async function listarProductosFiltrados(filters, pagination) {
     where.push(`p.anio = $${values.length}`);
   }
 
+  if (filters.anio_min !== null) {
+    values.push(filters.anio_min);
+    where.push(`p.anio >= $${values.length}`);
+  }
+
+  if (filters.anio_max !== null) {
+    values.push(filters.anio_max);
+    where.push(`p.anio <= $${values.length}`);
+  }
+
   if (filters.destacado !== null) {
     values.push(filters.destacado);
     where.push(`p.destacado = $${values.length}`);
@@ -118,5 +128,85 @@ export async function listarProductosFiltrados(filters, pagination) {
   return {
     productos: productosResult.rows,
     total,
+  };
+}
+
+export async function obtenerOpcionesFiltrosProductos() {
+  const [
+    categoriasResult,
+    marcasResult,
+    modelosResult,
+    tiposProductoResult,
+    condicionesResult,
+    aniosResult,
+    preciosResult,
+  ] = await Promise.all([
+    pool.query(`
+      SELECT DISTINCT c.id, c.nombre, c.slug
+      FROM categorias c
+      INNER JOIN productos p ON p.categoria_id = c.id
+      WHERE c.activa = true
+        AND p.activo = true
+      ORDER BY c.nombre ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.marca AS value
+      FROM productos p
+      WHERE p.activo = true
+        AND p.marca IS NOT NULL
+        AND BTRIM(p.marca) <> ''
+      ORDER BY p.marca ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.modelo AS value
+      FROM productos p
+      WHERE p.activo = true
+        AND p.modelo IS NOT NULL
+        AND BTRIM(p.modelo) <> ''
+      ORDER BY p.modelo ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.tipo_producto AS value
+      FROM productos p
+      WHERE p.activo = true
+        AND p.tipo_producto IS NOT NULL
+        AND BTRIM(p.tipo_producto) <> ''
+      ORDER BY p.tipo_producto ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.condicion AS value
+      FROM productos p
+      WHERE p.activo = true
+        AND p.condicion IS NOT NULL
+        AND BTRIM(p.condicion) <> ''
+      ORDER BY p.condicion ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.anio AS value
+      FROM productos p
+      WHERE p.activo = true
+        AND p.anio IS NOT NULL
+      ORDER BY p.anio DESC
+    `),
+    pool.query(`
+      SELECT
+        MIN(p.precio)::numeric AS precio_min,
+        MAX(p.precio)::numeric AS precio_max
+      FROM productos p
+      WHERE p.activo = true
+    `),
+  ]);
+
+  return {
+    categorias: categoriasResult.rows,
+    marcas: marcasResult.rows.map((row) => row.value),
+    modelos: modelosResult.rows.map((row) => row.value),
+    tipos_producto: tiposProductoResult.rows.map((row) => row.value),
+    condiciones: condicionesResult.rows.map((row) => row.value),
+    anios: aniosResult.rows.map((row) => row.value),
+    precios: {
+      precio_min: preciosResult.rows[0].precio_min,
+      precio_max: preciosResult.rows[0].precio_max,
+    },
   };
 }

@@ -1,207 +1,91 @@
-# Filtracion y paginacion de productos
+# Guia de filtracion y paginacion de productos
 
-Este documento explica como funciona el flujo de productos en la API `ecommerce-sosaimpor-api`, desde que llega una request HTTP hasta que se consulta la base de datos y se devuelve una respuesta lista para el frontend.
+Esta guia explica como funciona el listado de productos con filtros, busqueda y paginacion en la API `ecommerce-sosaimpor-api`.
 
-## Ruta principal
-
-Todos los filtros de productos usan la misma ruta base:
-
-```http
-GET /api/productos
-```
-
-Los filtros, la busqueda y la paginacion se envian como query params:
+La idea principal es simple: todos los filtros de productos usan una sola ruta `GET /api/productos`, y cada filtro se envia como query param.
 
 ```http
 GET /api/productos?page=1&limit=12&marca=Toyota&search=faro
 ```
 
-No existe una ruta separada para filtros. Los filtros pertenecen al modulo de productos.
-
-## Flujo por capas
-
-La arquitectura sigue este orden:
+Esta estructura es facil de replicar en otro proyecto porque separa responsabilidades por capas:
 
 ```txt
 routes -> controller -> service -> model -> database
 ```
 
-## Archivos que participan
+## Objetivo
 
-### src/app.js
+El endpoint de productos permite:
 
-Registra las rutas principales de la API.
+- cargar productos activos;
+- mostrar destacados en el home;
+- buscar por texto libre;
+- filtrar por categoria, marca, modelo, tipo, condicion, anio y precio;
+- combinar varios filtros al mismo tiempo;
+- paginar resultados para no enviar todos los productos de golpe;
+- devolver una respuesta estandar para que el frontend consuma facil.
 
-Para productos usa:
+## Base de datos esperada
 
-```js
-app.use("/api/productos", productosRoutes);
-```
+La tabla principal es `productos`.
 
-Eso significa que cualquier request que empiece con `/api/productos` sera enviada al router de productos.
-
-### src/routes/productos.routes.js
-
-Define las rutas propias del modulo productos.
-
-La ruta principal es:
-
-```js
-router.get("/", listarProductos);
-```
-
-Como `app.js` ya monto el router en `/api/productos`, esta ruta responde a:
-
-```http
-GET /api/productos
-```
-
-### src/controllers/productos.controller.js
-
-Recibe la request de Express.
-
-Sus responsabilidades son:
-
-- leer `req.query`;
-- enviar los query params al service;
-- devolver una respuesta JSON estandar;
-- pasar errores al middleware de errores.
-
-Tambien deja logs temporales utiles:
-
-```txt
-[productos] Request recibida
-```
-
-### src/services/productos.service.js
-
-Contiene la logica de aplicacion.
-
-Sus responsabilidades son:
-
-- construir los filtros usando `getProductFilters`;
-- construir la paginacion usando `getPagination`;
-- llamar al modelo `listarProductosFiltrados`;
-- calcular `totalPages`, `hasNextPage` y `hasPrevPage`;
-- devolver `data` y `pagination`.
-
-Tambien deja logs temporales:
-
-```txt
-[productos] Filtros construidos
-[productos] Paginacion usada
-```
-
-### src/models/productos.model.js
-
-Construye y ejecuta el SQL contra PostgreSQL.
-
-Siempre filtra solo productos activos:
+Campos usados por el filtrado:
 
 ```sql
-p.activo = true
+productos.categoria_id
+productos.nombre
+productos.tipo_producto
+productos.marca
+productos.modelo
+productos.anio
+productos.codigo_producto
+productos.condicion
+productos.precio
+productos.destacado
+productos.activo
+productos.creado_en
 ```
 
-Permite filtrar por:
-
-- `categoria_id`
-- `marca`
-- `modelo`
-- `tipo_producto`
-- `condicion`
-- `precio_min`
-- `precio_max`
-- `anio`
-- `destacado`
-- `search`
-
-La busqueda `search` usa `ILIKE` sobre:
-
-- `p.nombre`
-- `p.marca`
-- `p.modelo`
-- `p.tipo_producto`
-- `p.codigo_producto`
-
-Tambien devuelve:
-
-- `categoria_nombre` desde la tabla `categorias`;
-- `imagen_principal` desde la tabla `producto_imagenes`.
-
-Ordena los productos asi:
+Tablas relacionadas usadas por el listado:
 
 ```sql
-ORDER BY p.destacado DESC, p.creado_en DESC
+categorias
+producto_imagenes
 ```
 
-Y aplica paginacion con:
+La categoria se filtra por ID porque existe esta relacion:
 
 ```sql
-LIMIT
-OFFSET
+productos.categoria_id REFERENCES categorias(id)
 ```
 
-### src/utils/filters.js
+En cambio `marca`, `modelo`, `tipo_producto` y `condicion` se filtran por texto controlado, porque en la base actual son columnas `VARCHAR` dentro de `productos`.
 
-Convierte los query params recibidos desde la URL a filtros limpios para el modelo.
+## Regla de filtros segun esta base
 
-Hace estas tareas:
+| Campo del frontend | Query param | Tipo | Como se usa |
+| --- | --- | --- | --- |
+| Barra de busqueda | `search` | Texto libre | Busca con `ILIKE` |
+| Categoria | `categoria_id` | Numero / ID | Filtra por `productos.categoria_id` |
+| Marca | `marca` | Texto controlado | Filtra por marca exacta ignorando mayusculas |
+| Modelo | `modelo` | Texto controlado | Filtra por modelo exacto ignorando mayusculas |
+| Tipo de producto | `tipo_producto` | Texto controlado | Filtra por tipo exacto ignorando mayusculas |
+| Condicion | `condicion` | Texto controlado | Filtra por condicion exacta |
+| Anio exacto | `anio` | Numero | Filtra por un anio especifico |
+| Anio minimo | `anio_min` | Numero | Filtra desde un anio |
+| Anio maximo | `anio_max` | Numero | Filtra hasta un anio |
+| Precio minimo | `precio_min` | Numero | Filtra desde un precio |
+| Precio maximo | `precio_max` | Numero | Filtra hasta un precio |
+| Destacado | `destacado` | Booleano | Filtra destacados con `true` |
+| Pagina | `page` | Numero | Pagina actual |
+| Limite | `limit` | Numero | Cantidad por pagina |
 
-- convierte numeros con `Number`;
-- convierte `destacado=true` a booleano `true`;
-- convierte `destacado=false` a booleano `false`;
-- si `destacado` no viene, deja `null` para no filtrar por destacado;
-- elimina strings vacios;
-- ignora filtros invalidos.
+La barra de busqueda es el unico campo que el cliente escribe libremente. Los demas filtros deben venir de combo boxes, selects, sliders o inputs controlados.
 
-Ejemplo:
+## Respuesta estandar
 
-```http
-GET /api/productos?marca=Toyota&precio_min=100&destacado=true
-```
-
-Se convierte en algo parecido a:
-
-```js
-{
-  marca: "Toyota",
-  precio_min: 100,
-  destacado: true
-}
-```
-
-### src/utils/pagination.js
-
-Calcula la paginacion.
-
-Reglas:
-
-- `page` minimo es `1`;
-- `limit` por defecto es `12`;
-- `limit` maximo es `50`;
-- `offset` se calcula con `(page - 1) * limit`.
-
-Ejemplo:
-
-```http
-GET /api/productos?page=2&limit=12
-```
-
-Resultado:
-
-```js
-{
-  page: 2,
-  limit: 12,
-  offset: 12
-}
-```
-
-### src/utils/response.js
-
-Estandariza la respuesta para el frontend.
-
-La respuesta correcta tiene esta forma:
+El frontend siempre recibe una respuesta con esta forma:
 
 ```json
 {
@@ -218,11 +102,177 @@ La respuesta correcta tiene esta forma:
 }
 ```
 
-### src/middlewares/error.middleware.js
+Cuando se piden opciones para combo boxes, la respuesta usa el mismo formato, pero `pagination` puede venir como `null`.
 
-Maneja errores de forma centralizada.
+```json
+{
+  "ok": true,
+  "data": {
+    "categorias": [],
+    "marcas": [],
+    "modelos": [],
+    "tipos_producto": [],
+    "condiciones": [],
+    "anios": [],
+    "precios": {
+      "precio_min": "100.00",
+      "precio_max": "800.00"
+    }
+  },
+  "pagination": null
+}
+```
 
-Si la ruta no existe, responde:
+## Flujo de archivos
+
+### 1. app.js
+
+Registra el router de productos.
+
+```js
+app.use("/api/productos", productosRoutes);
+```
+
+Todo lo que empiece con `/api/productos` entra al modulo de productos.
+
+### 2. routes/productos.routes.js
+
+Define las rutas del modulo.
+
+```js
+router.get("/filtros-opciones", listarFiltrosProductos);
+router.get("/", listarProductos);
+```
+
+Rutas resultantes:
+
+```http
+GET /api/productos
+GET /api/productos/filtros-opciones
+```
+
+### 3. controllers/productos.controller.js
+
+Recibe la request de Express.
+
+Responsabilidades:
+
+- leer `req.query`;
+- llamar al service;
+- responder con JSON estandar;
+- enviar errores al middleware.
+
+Ejemplo del flujo:
+
+```js
+const resultado = await obtenerProductos(req.query);
+res.json(successResponse(resultado.data, resultado.pagination));
+```
+
+### 4. services/productos.service.js
+
+Contiene la logica de aplicacion.
+
+Responsabilidades:
+
+- convertir query params en filtros limpios;
+- calcular paginacion;
+- llamar al model;
+- calcular metadata de paginacion.
+
+Ejemplo:
+
+```js
+const filters = getProductFilters(query);
+const pagination = getPagination(query);
+const { productos, total } = await listarProductosFiltrados(filters, pagination);
+```
+
+### 5. models/productos.model.js
+
+Construye el SQL y consulta PostgreSQL.
+
+Siempre filtra productos activos:
+
+```sql
+p.activo = true
+```
+
+Tambien:
+
+- une `categorias` para devolver `categoria_nombre`;
+- consulta `producto_imagenes` para devolver `imagen_principal`;
+- ordena por destacados y fecha de creacion;
+- usa `LIMIT` y `OFFSET`.
+
+Orden:
+
+```sql
+ORDER BY p.destacado DESC, p.creado_en DESC
+```
+
+Paginacion:
+
+```sql
+LIMIT $n
+OFFSET $n
+```
+
+### 6. utils/filters.js
+
+Convierte los query params a tipos correctos.
+
+Ejemplos:
+
+```txt
+"1" -> 1
+"100" -> 100
+"true" -> true
+"" -> null
+```
+
+Tambien ignora filtros vacios o invalidos.
+
+### 7. utils/pagination.js
+
+Calcula la paginacion.
+
+Reglas:
+
+- `page` minimo es `1`;
+- `limit` por defecto es `12`;
+- `limit` maximo es `50`;
+- `offset` se calcula con `(page - 1) * limit`.
+
+Ejemplo:
+
+```http
+GET /api/productos?page=2&limit=12
+```
+
+Resultado interno:
+
+```js
+{
+  page: 2,
+  limit: 12,
+  offset: 12
+}
+```
+
+### 8. utils/response.js
+
+Centraliza el formato de respuesta exitosa.
+
+```js
+successResponse(data, pagination);
+```
+
+### 9. middlewares/error.middleware.js
+
+Centraliza errores.
+
+Ruta inexistente:
 
 ```json
 {
@@ -231,7 +281,7 @@ Si la ruta no existe, responde:
 }
 ```
 
-Si ocurre un error interno, responde:
+Error interno:
 
 ```json
 {
@@ -240,35 +290,224 @@ Si ocurre un error interno, responde:
 }
 ```
 
-### src/config/db.js
+## Como replicarlo en otro proyecto
 
-Configura el pool de PostgreSQL usando variables de entorno.
-
-Lee el archivo `.env` desde la raiz del proyecto y usa:
-
-- `DB_HOST`
-- `DB_PORT`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_NAME`
-
-### src/server.js
-
-Es el punto de arranque de la API.
-
-Carga el `.env`, importa `app.js` y levanta el servidor con:
+1. Crea una ruta base para el recurso.
 
 ```js
-app.listen(port);
+app.use("/api/productos", productosRoutes);
 ```
 
-El puerto viene de:
+2. Define una ruta `GET /`.
 
-```env
-PORT=3003
+```js
+router.get("/", listarProductos);
 ```
 
-## Casos de uso y rutas
+3. En el controller, lee `req.query`.
+
+```js
+const resultado = await obtenerProductos(req.query);
+```
+
+4. En el service, separa filtros y paginacion.
+
+```js
+const filters = getProductFilters(query);
+const pagination = getPagination(query);
+```
+
+5. En el model, arma el `WHERE` dinamicamente usando parametros SQL.
+
+```js
+values.push(filters.marca);
+where.push(`LOWER(p.marca) = LOWER($${values.length})`);
+```
+
+6. Ejecuta dos consultas:
+
+- una para contar el total;
+- otra para traer la pagina actual.
+
+7. Devuelve siempre `data` y `pagination`.
+
+## Campos que debe tener el frontend
+
+### Barra de busqueda
+
+Campo de texto libre.
+
+Envia:
+
+```txt
+search
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?search=faro&page=1&limit=12
+```
+
+### Categoria
+
+Combo box cargado desde:
+
+```http
+GET /api/productos/filtros-opciones
+```
+
+Envia el ID:
+
+```txt
+categoria_id
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?categoria_id=1&page=1&limit=12
+```
+
+### Marca
+
+Combo box con valores controlados desde la API.
+
+Envia:
+
+```txt
+marca
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?marca=Toyota&page=1&limit=12
+```
+
+### Modelo
+
+Combo box con valores controlados desde la API.
+
+Envia:
+
+```txt
+modelo
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?modelo=Hilux&page=1&limit=12
+```
+
+### Tipo de producto
+
+Combo box con valores controlados desde la API.
+
+Envia:
+
+```txt
+tipo_producto
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?tipo_producto=Faro&page=1&limit=12
+```
+
+### Condicion
+
+Combo box con valores controlados desde la API.
+
+Envia:
+
+```txt
+condicion
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?condicion=nuevo&page=1&limit=12
+```
+
+### Anio
+
+Puede ser selector exacto o rango.
+
+Anio exacto:
+
+```txt
+anio
+```
+
+Rango:
+
+```txt
+anio_min
+anio_max
+```
+
+Ejemplos:
+
+```http
+GET /api/productos?anio=2020&page=1&limit=12
+GET /api/productos?anio_min=2018&anio_max=2024&page=1&limit=12
+```
+
+### Precio
+
+Inputs numericos o slider de rango.
+
+Envia:
+
+```txt
+precio_min
+precio_max
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?precio_min=100&precio_max=800&page=1&limit=12
+```
+
+### Destacados
+
+Usado para home o secciones destacadas.
+
+Envia:
+
+```txt
+destacado
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?destacado=true&page=1&limit=8
+```
+
+### Paginacion
+
+Debe enviarse junto con cualquier filtro.
+
+Envia:
+
+```txt
+page
+limit
+```
+
+Ejemplo:
+
+```http
+GET /api/productos?page=1&limit=12
+```
+
+## Rutas y casos de uso
 
 En los ejemplos se usa:
 
@@ -276,281 +515,169 @@ En los ejemplos se usa:
 http://localhost:3003
 ```
 
-Si tu `.env` usa otro puerto, cambia `3003` por el valor de `PORT`.
+Si el proyecto usa otro puerto, cambia `3003` por el valor real de `PORT`.
 
-## 1. Cuando el cliente entra por primera vez al home
+### Productos generales (GET)
 
-El frontend debe cargar productos destacados activos.
+Carga productos activos normales paginados.
 
-Ruta:
+```http
+GET http://localhost:3003/api/productos
+```
+
+### Productos paginados (GET)
+
+Carga productos por paginas para no enviar todos de golpe.
+
+```http
+GET http://localhost:3003/api/productos?page=1&limit=12
+```
+
+### Productos destacados del home (GET)
+
+Carga solo productos destacados para el inicio.
 
 ```http
 GET http://localhost:3003/api/productos?destacado=true&page=1&limit=8
 ```
 
-Uso:
+### Filtrar por categoria usando ID (GET)
 
-- home principal;
-- seccion de productos destacados;
-- primera carga de la pagina.
-
-## 2. Cuando el cliente entra al catalogo general
-
-El frontend carga productos activos sin filtro especial.
-
-Ruta:
+Muestra productos de una categoria especifica.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12
+GET http://localhost:3003/api/productos?categoria_id=1&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por marca (GET)
 
-- pagina de catalogo;
-- listado general de productos;
-- cuando no se selecciono ningun filtro.
-
-## 3. Cuando el cliente pasa a la siguiente pagina
-
-Ruta:
+Muestra productos de una marca especifica.
 
 ```http
-GET http://localhost:3003/api/productos?page=2&limit=12
+GET http://localhost:3003/api/productos?marca=Toyota&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por modelo (GET)
 
-- boton siguiente;
-- paginacion del catalogo;
-- cargar mas productos sin enviar todos de golpe.
-
-## 4. Cuando el cliente busca una palabra en la barra de busqueda
-
-Ejemplo buscando `faro`:
+Muestra productos compatibles con un modelo especifico.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&search=faro
+GET http://localhost:3003/api/productos?modelo=Hilux&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por tipo de producto (GET)
 
-- barra de busqueda;
-- busqueda por nombre;
-- busqueda por marca;
-- busqueda por modelo;
-- busqueda por tipo de producto;
-- busqueda por codigo de producto.
-
-## 5. Cuando el cliente filtra por categoria
-
-Ejemplo categoria con id `1`:
+Muestra productos como faros, espejos, parachoques, etc.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1
+GET http://localhost:3003/api/productos?tipo_producto=Faro&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por condicion (GET)
 
-- menu de categorias;
-- filtro lateral por categoria;
-- seccion de productos de una categoria.
-
-## 6. Cuando el cliente filtra por marca
-
-Ejemplo marca `Toyota`:
+Muestra productos nuevos o usados importados.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&marca=Toyota
+GET http://localhost:3003/api/productos?condicion=nuevo&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por anio exacto (GET)
 
-- selector de marca;
-- filtros laterales;
-- catalogo por fabricante.
-
-## 7. Cuando el cliente filtra por modelo
-
-Ejemplo modelo `Hilux`:
+Muestra productos compatibles con cierto anio.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&modelo=Hilux
+GET http://localhost:3003/api/productos?anio=2020&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por rango de anios (GET)
 
-- filtro de modelo;
-- busqueda de repuestos compatibles con un modelo especifico.
-
-## 8. Cuando el cliente filtra por tipo de producto
-
-Ejemplo tipo `faro`:
+Muestra productos compatibles dentro de un rango de anios.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&tipo_producto=faro
+GET http://localhost:3003/api/productos?anio_min=2018&anio_max=2024&page=1&limit=12
 ```
 
-Uso:
+### Filtrar por rango de precio (GET)
 
-- filtro por tipo de repuesto;
-- separar faros, parachoques, espejos, accesorios, etc.
-
-## 9. Cuando el cliente filtra por condicion
-
-Ejemplo condicion `nuevo`:
+Muestra productos dentro de un rango de precio.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&condicion=nuevo
+GET http://localhost:3003/api/productos?precio_min=100&precio_max=800&page=1&limit=12
 ```
 
-Uso:
+### Barra de busqueda general (GET)
 
-- filtro por productos nuevos;
-- filtro por productos usados;
-- filtro por condicion comercial.
-
-## 10. Cuando el cliente filtra por rango de precio
-
-Ejemplo productos entre `100` y `800`:
+Busca por nombre, marca, modelo, tipo o codigo.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&precio_min=100&precio_max=800
+GET http://localhost:3003/api/productos?search=faro&page=1&limit=12
 ```
 
-Uso:
+### Buscar por marca usando barra de busqueda (GET)
 
-- slider de precio;
-- minimo y maximo;
-- filtros por presupuesto.
-
-## 11. Cuando el cliente filtra solo por precio minimo
-
-Ejemplo productos desde `100`:
+Busca cualquier producto relacionado a Toyota.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&precio_min=100
+GET http://localhost:3003/api/productos?search=Toyota&page=1&limit=12
 ```
 
-Uso:
+### Buscar por modelo usando barra de busqueda (GET)
 
-- mostrar productos desde cierto precio.
-
-## 12. Cuando el cliente filtra solo por precio maximo
-
-Ejemplo productos hasta `800`:
+Busca cualquier producto relacionado a Hilux.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&precio_max=800
+GET http://localhost:3003/api/productos?search=Hilux&page=1&limit=12
 ```
 
-Uso:
+### Categoria + marca (GET)
 
-- mostrar productos dentro de un presupuesto maximo.
-
-## 13. Cuando el cliente filtra por anio
-
-Ejemplo anio `2020`:
+Filtra productos por categoria y marca juntas.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&anio=2020
+GET http://localhost:3003/api/productos?categoria_id=1&marca=Toyota&page=1&limit=12
 ```
 
-Uso:
+### Categoria + marca + modelo (GET)
 
-- repuestos compatibles con un anio especifico.
-
-## 14. Cuando el cliente filtra solo destacados
-
-Ruta:
+Filtra productos especificos por categoria, marca y modelo.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&destacado=true
+GET http://localhost:3003/api/productos?categoria_id=1&marca=Toyota&modelo=Hilux&page=1&limit=12
 ```
 
-Uso:
+### Barra de busqueda + marca (GET)
 
-- seccion de destacados;
-- carrusel de productos destacados;
-- landing o home.
-
-## 15. Cuando el cliente combina busqueda con marca
-
-Ejemplo buscar `faro` dentro de marca `Toyota`:
+Busca una palabra dentro de una marca especifica.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&search=faro&marca=Toyota
+GET http://localhost:3003/api/productos?search=faro&marca=Toyota&page=1&limit=12
 ```
 
-Uso:
+### Filtro avanzado completo (GET)
 
-- el cliente escribe una palabra y ademas selecciona marca.
-
-## 16. Cuando el cliente combina categoria y marca
-
-Ejemplo categoria `1` y marca `Toyota`:
+Usa varios filtros al mismo tiempo.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toyota
+GET http://localhost:3003/api/productos?categoria_id=1&marca=Toyota&modelo=Hilux&tipo_producto=Faro&precio_min=100&precio_max=800&anio_min=2018&anio_max=2024&page=1&limit=12
 ```
 
-Uso:
+### Opciones para combo boxes (GET)
 
-- productos de una categoria especifica y una marca especifica.
-
-## 17. Cuando el cliente combina categoria, marca y busqueda
-
-Ejemplo:
+Devuelve categorias, marcas, modelos, tipos, condiciones, anios y rangos para llenar filtros del frontend.
 
 ```http
-GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toyota&search=faro
+GET http://localhost:3003/api/productos/filtros-opciones
 ```
 
-Uso:
+## Notas para produccion
 
-- el cliente esta dentro de una categoria;
-- selecciona una marca;
-- escribe una palabra en la barra de busqueda.
+Los `console.log` de productos son temporales y sirven para depurar durante desarrollo:
 
-## 18. Cuando el cliente rellena todos los campos de filtro
-
-Ejemplo completo:
-
-```http
-GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toyota&modelo=Hilux&tipo_producto=faro&condicion=nuevo&precio_min=100&precio_max=800&anio=2020&destacado=true&search=faro
+```txt
+[productos] Request recibida
+[productos] Filtros construidos
+[productos] Paginacion usada
 ```
 
-Uso:
-
-- busqueda avanzada;
-- formulario completo de filtros;
-- el cliente quiere resultados muy especificos.
-
-## 19. Cuando el cliente limpia todos los filtros
-
-El frontend debe volver a llamar la ruta base paginada:
-
-```http
-GET http://localhost:3003/api/productos?page=1&limit=12
-```
-
-Uso:
-
-- boton limpiar filtros;
-- resetear catalogo;
-- volver al listado general.
-
-## 20. Cuando el cliente cambia el limite de productos por pagina
-
-Ejemplo mostrar `24` productos:
-
-```http
-GET http://localhost:3003/api/productos?page=1&limit=24
-```
-
-Uso:
-
-- selector de cantidad por pagina;
-- vistas de catalogo mas densas.
-
-El limite maximo permitido por la API es `50`.
+Antes de produccion se pueden quitar o reemplazar por un logger controlado por entorno.
 

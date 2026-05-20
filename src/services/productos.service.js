@@ -1,6 +1,9 @@
 import { getProductFilters } from "../utils/filters.js";
 import { getPagination } from "../utils/pagination.js";
-import { listarProductosFiltrados } from "../models/productos.model.js";
+import {
+  listarProductosFiltrados,
+  obtenerOpcionesFiltrosProductos,
+} from "../models/productos.model.js";
 
 export async function obtenerProductos(query) {
   const filters = getProductFilters(query);
@@ -27,4 +30,8 @@ export async function obtenerProductos(query) {
       hasPrevPage: pagination.page > 1,
     },
   };
+}
+
+export async function obtenerFiltrosProductos() {
+  return obtenerOpcionesFiltrosProductos();
 }
