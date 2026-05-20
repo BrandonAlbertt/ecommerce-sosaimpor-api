@@ -201,6 +201,37 @@ GET http://localhost:3003/api/productos?page=1&limit=12&stock=0
 GET http://localhost:3003/api/productos?search=faro&page=1&limit=12
 ```
 
+### Barra de busqueda por letra para sugerencias
+
+Esta ruta sirve para una barra tipo autocomplete. El frontend envia el texto que el usuario va escribiendo y decide cuantos resultados quiere mostrar.
+
+Ejemplo: si el usuario escribe `te`, el frontend puede pedir solo 4 sugerencias:
+
+```http
+GET http://localhost:3003/api/productos?search=te&page=1&limit=4
+```
+
+La API busca coincidencias parciales con `ILIKE '%te%'` en productos activos. Por eso puede encontrar productos cuyo nombre, marca, modelo, tipo de producto o codigo contengan esas letras.
+
+Ejemplo de uso en frontend:
+
+```txt
+Usuario escribe: t
+Frontend espera debounce
+Frontend consulta: /api/productos?search=t&page=1&limit=4
+
+Usuario escribe: te
+Frontend espera debounce
+Frontend consulta: /api/productos?search=te&page=1&limit=4
+```
+
+Recomendacion practica: para ahorrar recursos, conviene empezar a consultar desde 2 caracteres:
+
+```txt
+t  -> no consultar todavia
+te -> consultar /api/productos?search=te&page=1&limit=4
+```
+
 ### Buscar por marca usando barra de busqueda
 
 ```http
@@ -255,3 +286,5 @@ GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toy
 - `stock` puede manejarse como filtro del admin, no necesariamente del frontend publico.
 - Si se usan filtros, siempre conviene enviar tambien `page` y `limit`.
 - La busqueda `search` es texto libre; los demas filtros deberian venir de selects, sliders o inputs controlados.
+- Para autocomplete, no cargues todos los productos en el frontend. Consulta la API con `search`, `page=1` y un `limit` pequeno como `4` o `5`.
+- Si quieres mostrar imagen en sugerencias, usa `imagen_principal` y muestra una miniatura pequena. Para un servidor gratuito, es mejor usar imagenes comprimidas o thumbnails.

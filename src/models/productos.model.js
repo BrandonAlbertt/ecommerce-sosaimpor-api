@@ -1,70 +1,87 @@
 import { pool } from "../config/db.js";
 
-// Función para listar productos con filtros y paginación
+// ESTE ARCHIVO LO LLAMA src/services/productos.service.js.
+// AQUI SE HACE LA CONSULTA REAL A POSTGRES CON FILTROS Y PAGINACION.
+// EL MODELO RECIBE LOS DATOS YA LIMPIOS Y LOS CONVIERTE EN SQL.
 export async function listarProductosFiltrados(filters, pagination) {
+  // ARRAY DE PARAMETROS: EVITA CONCATENAR SQL Y AYUDA A PREVENIR INJECTION.
   const values = [];
+  // BASE DE LA CONSULTA: SIEMPRE SOLO PRODUCTOS ACTIVOS.
   const where = ["p.activo = true"];
 
+  // SI VIENE categoria_id, SE AGREGA AL WHERE.
   if (filters.categoria_id) {
     values.push(filters.categoria_id);
     where.push(`p.categoria_id = $${values.length}`);
   }
 
+  // SI VIENE marca, SE COMPARA SIN DISTINCTION DE MAYUSCULAS.
   if (filters.marca) {
     values.push(filters.marca);
     where.push(`LOWER(p.marca) = LOWER($${values.length})`);
   }
 
+  // SI VIENE modelo, TAMBIEN SE FILTRA.
   if (filters.modelo) {
     values.push(filters.modelo);
     where.push(`LOWER(p.modelo) = LOWER($${values.length})`);
   }
 
+  // SI VIENE tipo_producto, SE APLICA EL FILTRO.
   if (filters.tipo_producto) {
     values.push(filters.tipo_producto);
     where.push(`LOWER(p.tipo_producto) = LOWER($${values.length})`);
   }
 
+  // SI VIENE condicion, SE AGREGA AL WHERE.
   if (filters.condicion) {
     values.push(filters.condicion);
     where.push(`p.condicion = $${values.length}`);
   }
 
+  // PRECIO MINIMO.
   if (filters.precio_min !== null) {
     values.push(filters.precio_min);
     where.push(`p.precio >= $${values.length}`);
   }
 
+  // PRECIO MAXIMO.
   if (filters.precio_max !== null) {
     values.push(filters.precio_max);
     where.push(`p.precio <= $${values.length}`);
   }
 
+  // STOCK EXACTO.
   if (filters.stock !== null) {
     values.push(filters.stock);
     where.push(`p.stock = $${values.length}`);
   }
 
+  // AÑO EXACTO.
   if (filters.anio) {
     values.push(filters.anio);
     where.push(`p.anio = $${values.length}`);
   }
 
+  // AÑO MINIMO.
   if (filters.anio_min !== null) {
     values.push(filters.anio_min);
     where.push(`p.anio >= $${values.length}`);
   }
 
+  // AÑO MAXIMO.
   if (filters.anio_max !== null) {
     values.push(filters.anio_max);
     where.push(`p.anio <= $${values.length}`);
   }
 
+  // DESTACADO = TRUE O FALSE.
   if (filters.destacado !== null) {
     values.push(filters.destacado);
     where.push(`p.destacado = $${values.length}`);
   }
 
+  // DISPONIBILIDAD ESPECIAL: DISPONIBLE O PROXIMAMENTE.
   if (filters.disponibilidad) {
     if (filters.disponibilidad === "disponible") {
       where.push("p.stock > 0");
@@ -75,6 +92,7 @@ export async function listarProductosFiltrados(filters, pagination) {
     }
   }
 
+  // BUSQUEDA GENERAL: USA ILIKE EN VARIOS CAMPOS.
   if (filters.search) {
     values.push(`%${filters.search}%`);
     where.push(`
@@ -90,6 +108,7 @@ export async function listarProductosFiltrados(filters, pagination) {
 
   const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  // COUNT TOTAL: EL FRONTEND LO USA PARA SABER CUANTAS PAGINAS EXISTEN.
   const countQuery = `
     SELECT COUNT(*)::int AS total
     FROM productos p
@@ -99,12 +118,14 @@ export async function listarProductosFiltrados(filters, pagination) {
   const totalResult = await pool.query(countQuery, values);
   const total = totalResult.rows[0].total;
 
+  // LIMIT Y OFFSET: MUESTRAN SOLO LA PAGINA SOLICITADA.
   values.push(pagination.limit);
   const limitIndex = values.length;
 
   values.push(pagination.offset);
   const offsetIndex = values.length;
 
+  // CONSULTA FINAL: TRAE LOS CAMPOS QUE USA EL FRONTEND EN LA LISTA.
   const dataQuery = `
     SELECT 
       p.id,
@@ -146,6 +167,8 @@ export async function listarProductosFiltrados(filters, pagination) {
   };
 }
 
+// obtenerOpcionesFiltrosProductos() LA LLAMA src/services/productos.service.js.
+// ESTA FUNCION SIRVE PARA LLENAR LOS FILTROS DEL FRONTEND CON VALORES REALES.
 export async function obtenerOpcionesFiltrosProductos() {
   const [
     categoriasResult,

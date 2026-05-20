@@ -16,6 +16,14 @@ Los filtros se envian como query params:
 GET /api/productos?page=1&limit=12&marca=Toyota&search=faro
 ```
 
+Para una barra de busqueda en vivo o autocomplete se usa la misma ruta, pero con un limite pequeno:
+
+```http
+GET /api/productos?search=te&page=1&limit=4
+```
+
+Ese ejemplo significa: buscar productos activos que coincidan parcialmente con `te`, traer la pagina `1` y devolver maximo `4` productos.
+
 El flujo esta separado por capas:
 
 ```txt
@@ -34,6 +42,119 @@ routes -> controller -> service -> model -> database
 | `src/utils/pagination.js` | Calcula `page`, `limit` y `offset` |
 | `src/utils/response.js` | Estandariza la respuesta exitosa |
 | `src/middlewares/error.middleware.js` | Centraliza errores |
+
+## Flujo real por archivo
+
+Esta es la cadena completa, de arriba hacia abajo:
+
+```txt
+src/server.js
+  -> carga .env y arranca Express
+src/app.js
+  -> monta /api/productos
+src/routes/productos.routes.js
+  -> llama a listarProductos()
+src/controllers/productos.controller.js
+  -> llama a obtenerProductos(req.query)
+src/services/productos.service.js
+  -> llama a getProductFilters(query)
+  -> llama a getPagination(query)
+  -> llama a listarProductosFiltrados(filters, pagination)
+src/models/productos.model.js
+  -> usa pool desde src/config/db.js
+  -> ejecuta SQL real en PostgreSQL
+```
+
+Resumen corto de dependencias:
+
+- `productos.routes.js` depende de `productos.controller.js`.
+- `productos.controller.js` depende de `productos.service.js`.
+- `productos.service.js` depende de `utils/filters.js`, `utils/pagination.js` y `productos.model.js`.
+- `productos.model.js` depende de `config/db.js`.
+- `config/db.js` depende del `.env`.
+
+Si quieres seguir la funcionalidad sin perderte, lee en este orden:
+
+1. `src/routes/productos.routes.js`
+2. `src/controllers/productos.controller.js`
+3. `src/services/productos.service.js`
+4. `src/utils/filters.js`
+5. `src/utils/pagination.js`
+6. `src/models/productos.model.js`
+
+## Ejemplo simple: busqueda por letra
+
+Supongamos que el usuario escribe `te` en la barra de busqueda del frontend.
+
+El frontend deberia esperar un pequeno debounce, por ejemplo 300 ms, y luego llamar:
+
+```http
+GET /api/productos?search=te&page=1&limit=4
+```
+
+Asi viaja ese dato dentro de la API:
+
+```txt
+URL del navegador o fetch
+  search=te
+  page=1
+  limit=4
+
+src/routes/productos.routes.js
+  GET "/" coincide con /api/productos
+  llama a listarProductos
+
+src/controllers/productos.controller.js
+  recibe req.query
+  req.query = { search: "te", page: "1", limit: "4" }
+  llama a obtenerProductos(req.query)
+
+src/services/productos.service.js
+  getProductFilters(query) convierte search
+  getPagination(query) convierte page y limit
+
+src/utils/filters.js
+  search: "te"
+
+src/utils/pagination.js
+  page: 1
+  limit: 4
+  offset: 0
+
+src/models/productos.model.js
+  arma WHERE con ILIKE '%te%'
+  arma LIMIT 4
+  arma OFFSET 0
+  consulta PostgreSQL
+```
+
+Resultado esperado:
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "nombre": "Faro delantero Toyota",
+      "slug": "faro-delantero-toyota",
+      "marca": "Toyota",
+      "modelo": "Corolla",
+      "precio": "280.00",
+      "imagen_principal": "https://ejemplo.com/faro.jpg"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 4,
+    "total": 1,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+Importante: la API no sabe si el resultado se usara para catalogo o para sugerencias. El frontend decide eso con `limit`. Para sugerencias puede mandar `limit=4`; para catalogo puede mandar `limit=12`.
 
 ## Base de datos esperada
 
@@ -115,6 +236,14 @@ Rutas finales:
 GET /api/productos
 GET /api/productos/filtros-opciones
 ```
+
+Ruta final para busqueda por letra o autocomplete:
+
+```http
+GET /api/productos?search=te&page=1&limit=4
+```
+
+No es una ruta nueva en Express. Es la misma ruta `GET /api/productos`, solo que recibe query params. Esto mantiene la API simple y evita duplicar logica.
 
 ## Controller
 
@@ -341,6 +470,31 @@ if (filters.search) {
 }
 ```
 
+Con `search=te`, el parametro real que llega a PostgreSQL queda parecido a:
+
+```txt
+%te%
+```
+
+Eso permite encontrar coincidencias aunque las letras esten dentro del texto:
+
+```txt
+Toyota
+Faro delantero
+Alternador
+codigo TE-123
+```
+
+Campos donde busca actualmente:
+
+- `p.nombre`
+- `p.marca`
+- `p.modelo`
+- `p.tipo_producto`
+- `p.codigo_producto`
+
+No busca en `descripcion` actualmente. Para autocomplete eso puede ser positivo porque evita resultados demasiado amplios.
+
 ## Consulta de conteo y consulta de datos
 
 Primero se cuenta el total:
@@ -524,3 +678,24 @@ Los `console.log` actuales ayudan durante desarrollo:
 ```
 
 Antes de produccion se pueden quitar o reemplazar por un logger controlado por entorno.
+
+## Recomendaciones para autocomplete
+
+- Usar debounce de 300 ms o 400 ms en el frontend.
+- Consultar desde 2 caracteres para reducir trabajo del servidor.
+- Usar `page=1`.
+- Usar `limit=4` o `limit=5` para sugerencias.
+- No traer todos los productos al frontend para filtrarlos ahi.
+- Mostrar `imagen_principal` solo como miniatura pequena.
+- Si el servidor o almacenamiento es gratuito, comprimir imagenes o usar thumbnails para no gastar ancho de banda innecesario.
+- Cuando el usuario presiona "Ver mas resultados", navegar al catalogo con el mismo search, por ejemplo `/productos?search=te`.
+
+Ejemplo de comportamiento:
+
+```txt
+Input vacio -> no consulta
+t           -> opcionalmente no consulta
+te          -> GET /api/productos?search=te&page=1&limit=4
+toy         -> GET /api/productos?search=toy&page=1&limit=4
+Ver mas     -> /productos?search=toy
+```

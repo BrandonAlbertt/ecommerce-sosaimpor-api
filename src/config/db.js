@@ -3,6 +3,7 @@ import pg from "pg";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// DB.JS: CARGA LA CONFIGURACION DEL .ENV Y ABRE LA CONEXION A POSTGRES.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const envPath = resolve(__dirname, "../../.env");
@@ -24,8 +25,10 @@ const dbConfig = {
   connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
 };
 
+// POOL COMPARTIDO: LO USA TODA LA API PARA CONSULTAR LA BASE DE DATOS.
 export const pool = new Pool(dbConfig);
 
+// PRUEBA RAPIDA: VERIFICA QUE POSTGRES RESPONDE CORRECTAMENTE.
 export async function testDbConnection() {
   console.log("[db] Configuracion cargada:", {
     envFile: envPath,
