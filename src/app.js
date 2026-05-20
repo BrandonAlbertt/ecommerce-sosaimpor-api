@@ -4,6 +4,7 @@ import cors from "cors";
 import categoriasRoutes from "./routes/categorias.routes.js";
 import productosRoutes from "./routes/productos.routes.js";
 import configuracionRoutes from "./routes/configuracion.routes.js";
+import adminProductosRoutes from "./routes/admin.productos.routes.js";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
 
 const app = express();
@@ -20,8 +21,11 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/categorias", categoriasRoutes);
+// Ruta publica/user de productos. No requiere autenticacion.
 app.use("/api/productos", productosRoutes);
 app.use("/api/configuracion", configuracionRoutes);
+// TODO: proteger rutas admin con authMiddleware y rol admin.
+app.use("/api/admin/productos", adminProductosRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

@@ -53,3 +53,24 @@ export function getProductFilters(query) {
     search: toTrimmedString(query.search),
   };
 }
+
+// FILTROS PARA ADMIN: REUTILIZA LOS FILTROS PUBLICOS Y AGREGA activo.
+// La ruta publica no usa este helper, por eso no cambia su comportamiento.
+export function getAdminProductFilters(query) {
+  const baseFilters = getProductFilters(query);
+
+  const toBoolean = (value) => {
+    if (typeof value !== "string") return null;
+
+    const normalizedValue = value.trim().toLowerCase();
+    if (normalizedValue === "true") return true;
+    if (normalizedValue === "false") return false;
+
+    return null;
+  };
+
+  return {
+    ...baseFilters,
+    activo: toBoolean(query.activo),
+  };
+}

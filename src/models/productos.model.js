@@ -268,3 +268,288 @@ export async function obtenerOpcionesFiltrosProductos() {
     disponibilidad: opcionesDisponibilidad,
   };
 }
+
+const adminSelectFields = `
+  p.id,
+  p.categoria_id,
+  c.nombre AS categoria_nombre,
+  p.nombre,
+  p.slug,
+  p.descripcion,
+  p.tipo_producto,
+  p.marca,
+  p.modelo,
+  p.anio,
+  p.codigo_producto,
+  p.condicion,
+  p.precio,
+  p.stock,
+  p.proximamente,
+  p.destacado,
+  p.orden_destacado,
+  p.visitas,
+  p.consultas,
+  p.activo,
+  p.creado_en,
+  (
+    SELECT pi.imagen_url
+    FROM producto_imagenes pi
+    WHERE pi.producto_id = p.id
+    ORDER BY pi.principal DESC, pi.orden ASC
+    LIMIT 1
+  ) AS imagen_principal
+`;
+
+function agregarFiltrosAdmin(filters, values, where) {
+  if (filters.activo !== null) {
+    values.push(filters.activo);
+    where.push(`p.activo = $${values.length}`);
+  }
+
+  if (filters.categoria_id) {
+    values.push(filters.categoria_id);
+    where.push(`p.categoria_id = $${values.length}`);
+  }
+
+  if (filters.marca) {
+    values.push(filters.marca);
+    where.push(`LOWER(p.marca) = LOWER($${values.length})`);
+  }
+
+  if (filters.modelo) {
+    values.push(filters.modelo);
+    where.push(`LOWER(p.modelo) = LOWER($${values.length})`);
+  }
+
+  if (filters.tipo_producto) {
+    values.push(filters.tipo_producto);
+    where.push(`LOWER(p.tipo_producto) = LOWER($${values.length})`);
+  }
+
+  if (filters.condicion) {
+    values.push(filters.condicion);
+    where.push(`p.condicion = $${values.length}`);
+  }
+
+  if (filters.precio_min !== null) {
+    values.push(filters.precio_min);
+    where.push(`p.precio >= $${values.length}`);
+  }
+
+  if (filters.precio_max !== null) {
+    values.push(filters.precio_max);
+    where.push(`p.precio <= $${values.length}`);
+  }
+
+  if (filters.stock !== null) {
+    values.push(filters.stock);
+    where.push(`p.stock = $${values.length}`);
+  }
+
+  if (filters.anio) {
+    values.push(filters.anio);
+    where.push(`p.anio = $${values.length}`);
+  }
+
+  if (filters.anio_min !== null) {
+    values.push(filters.anio_min);
+    where.push(`p.anio >= $${values.length}`);
+  }
+
+  if (filters.anio_max !== null) {
+    values.push(filters.anio_max);
+    where.push(`p.anio <= $${values.length}`);
+  }
+
+  if (filters.destacado !== null) {
+    values.push(filters.destacado);
+    where.push(`p.destacado = $${values.length}`);
+  }
+
+  if (filters.disponibilidad) {
+    if (filters.disponibilidad === "disponible") {
+      where.push("p.stock > 0");
+    }
+
+    if (filters.disponibilidad === "proximamente") {
+      where.push("p.stock = 0 AND p.proximamente = true");
+    }
+  }
+
+  if (filters.search) {
+    values.push(`%${filters.search}%`);
+    where.push(`
+      (
+        p.nombre ILIKE $${values.length}
+        OR p.marca ILIKE $${values.length}
+        OR p.modelo ILIKE $${values.length}
+        OR p.tipo_producto ILIKE $${values.length}
+        OR p.codigo_producto ILIKE $${values.length}
+      )
+    `);
+  }
+}
+
+export async function listarProductosAdminFiltrados(filters, pagination) {
+  const values = [];
+  const where = [];
+
+  agregarFiltrosAdmin(filters, values, where);
+
+  const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+  const countQuery = `
+    SELECT COUNT(*)::int AS total
+    FROM productos p
+    ${whereSQL}
+  `;
+
+  const totalResult = await pool.query(countQuery, values);
+  const total = totalResult.rows[0].total;
+
+  values.push(pagination.limit);
+  const limitIndex = values.length;
+
+  values.push(pagination.offset);
+  const offsetIndex = values.length;
+
+  const dataQuery = `
+    SELECT
+      ${adminSelectFields}
+    FROM productos p
+    LEFT JOIN categorias c ON c.id = p.categoria_id
+    ${whereSQL}
+    ORDER BY p.creado_en DESC, p.id DESC
+    LIMIT $${limitIndex}
+    OFFSET $${offsetIndex}
+  `;
+
+  const productosResult = await pool.query(dataQuery, values);
+
+  return {
+    productos: productosResult.rows,
+    total,
+  };
+}
+
+export async function obtenerProductoAdminPorId(id) {
+  const result = await pool.query(
+    `
+      SELECT
+        ${adminSelectFields}
+      FROM productos p
+      LEFT JOIN categorias c ON c.id = p.categoria_id
+      WHERE p.id = $1
+      LIMIT 1
+    `,
+    [id]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function categoriaProductoExiste(categoriaId) {
+  const result = await pool.query(
+    "SELECT 1 FROM categorias WHERE id = $1 LIMIT 1",
+    [categoriaId]
+  );
+
+  return result.rowCount > 0;
+}
+
+const adminProductColumns = [
+  "categoria_id",
+  "nombre",
+  "slug",
+  "descripcion",
+  "tipo_producto",
+  "marca",
+  "modelo",
+  "anio",
+  "codigo_producto",
+  "condicion",
+  "precio",
+  "stock",
+  "proximamente",
+  "destacado",
+  "orden_destacado",
+  "activo",
+];
+
+export async function crearProductoAdmin(data) {
+  const columns = adminProductColumns.filter((column) =>
+    Object.prototype.hasOwnProperty.call(data, column)
+  );
+  const values = columns.map((column) => data[column]);
+  const placeholders = columns.map((_, index) => `$${index + 1}`);
+
+  const result = await pool.query(
+    `
+      INSERT INTO productos (${columns.join(", ")})
+      VALUES (${placeholders.join(", ")})
+      RETURNING id
+    `,
+    values
+  );
+
+  return obtenerProductoAdminPorId(result.rows[0].id);
+}
+
+export async function actualizarProductoAdmin(id, data) {
+  const columns = adminProductColumns.filter((column) =>
+    Object.prototype.hasOwnProperty.call(data, column)
+  );
+
+  if (!columns.length) {
+    return obtenerProductoAdminPorId(id);
+  }
+
+  const values = columns.map((column) => data[column]);
+  const setSQL = columns
+    .map((column, index) => `${column} = $${index + 1}`)
+    .join(", ");
+
+  values.push(id);
+
+  const result = await pool.query(
+    `
+      UPDATE productos
+      SET ${setSQL}
+      WHERE id = $${values.length}
+      RETURNING id
+    `,
+    values
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return obtenerProductoAdminPorId(id);
+}
+
+export async function desactivarProductoAdmin(id) {
+  const result = await pool.query(
+    "UPDATE productos SET activo = false WHERE id = $1 RETURNING id",
+    [id]
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return obtenerProductoAdminPorId(id);
+}
+
+export async function activarProductoAdmin(id) {
+  const result = await pool.query(
+    "UPDATE productos SET activo = true WHERE id = $1 RETURNING id",
+    [id]
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return obtenerProductoAdminPorId(id);
+}
