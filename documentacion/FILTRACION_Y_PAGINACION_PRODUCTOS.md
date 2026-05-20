@@ -42,6 +42,8 @@ productos.anio
 productos.codigo_producto
 productos.condicion
 productos.precio
+productos.stock
+productos.proximamente
 productos.destacado
 productos.activo
 productos.creado_en
@@ -77,6 +79,8 @@ En cambio `marca`, `modelo`, `tipo_producto` y `condicion` se filtran por texto 
 | Anio maximo | `anio_max` | Numero | Filtra hasta un anio |
 | Precio minimo | `precio_min` | Numero | Filtra desde un precio |
 | Precio maximo | `precio_max` | Numero | Filtra hasta un precio |
+| Stock exacto | `stock` | Numero | Filtra por cantidad exacta de stock |
+| Disponibilidad | `disponibilidad` | Texto controlado | Filtra disponibles o proximamente |
 | Destacado | `destacado` | Booleano | Filtra destacados con `true` |
 | Pagina | `page` | Numero | Pagina actual |
 | Limite | `limit` | Numero | Cantidad por pagina |
@@ -117,7 +121,8 @@ Cuando se piden opciones para combo boxes, la respuesta usa el mismo formato, pe
     "precios": {
       "precio_min": "100.00",
       "precio_max": "800.00"
-    }
+    },
+    "disponibilidad": ["disponible", "proximamente"]
   },
   "pagination": null
 }
@@ -355,6 +360,7 @@ Combo box cargado desde:
 
 ```http
 GET /api/productos/filtros-opciones
+GET http://localhost:3003/api/productos/filtros-opciones
 ```
 
 Envia el ID:
@@ -472,6 +478,53 @@ Ejemplo:
 
 ```http
 GET /api/productos?precio_min=100&precio_max=800&page=1&limit=12
+```
+
+### Stock
+
+Filtro numerico exacto. Es util para el admin cuando necesita listar productos con una cantidad especifica de stock.
+
+Envia:
+
+```txt
+stock
+```
+
+Ejemplo para listar productos sin stock:
+
+```http
+GET /api/productos?stock=0&page=1&limit=12
+```
+
+### Disponibilidad
+
+Combo box o select con valores controlados desde la API.
+
+Envia:
+
+```txt
+disponibilidad
+```
+
+Valores soportados:
+
+```txt
+disponible
+proximamente
+```
+
+Reglas:
+
+```txt
+disponible = stock > 0
+proximamente = stock = 0 y proximamente = true
+```
+
+Ejemplos:
+
+```http
+GET /api/productos?disponibilidad=disponible&page=1&limit=12
+GET /api/productos?disponibilidad=proximamente&page=1&limit=12
 ```
 
 ### Destacados
@@ -605,6 +658,31 @@ Muestra productos dentro de un rango de precio.
 GET http://localhost:3003/api/productos?precio_min=100&precio_max=800&page=1&limit=12
 ```
 
+### Filtrar por stock exacto (GET)
+
+Muestra productos con una cantidad exacta de stock. Para el admin, `stock=0` permite listar productos sin stock.
+
+```http
+GET http://localhost:3003/api/productos?stock=0&page=1&limit=12
+```
+
+### Admin: productos sin stock (GET)
+
+Ruta util para que el admin liste productos sin stock y pueda decidir si los marca como proximamente.
+
+```http
+GET http://localhost:3003/api/productos?page=1&limit=12&stock=0
+```
+
+### Filtrar por disponibilidad (GET)
+
+Muestra productos disponibles o marcados como proximamente.
+
+```http
+GET http://localhost:3003/api/productos?disponibilidad=disponible&page=1&limit=12
+GET http://localhost:3003/api/productos?disponibilidad=proximamente&page=1&limit=12
+```
+
 ### Barra de busqueda general (GET)
 
 Busca por nombre, marca, modelo, tipo o codigo.
@@ -658,7 +736,15 @@ GET http://localhost:3003/api/productos?search=faro&marca=Toyota&page=1&limit=12
 Usa varios filtros al mismo tiempo.
 
 ```http
-GET http://localhost:3003/api/productos?categoria_id=1&marca=Toyota&modelo=Hilux&tipo_producto=Faro&precio_min=100&precio_max=800&anio_min=2018&anio_max=2024&page=1&limit=12
+GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toyota&modelo=Hilux&tipo_producto=faro&condicion=nuevo&precio_min=100&precio_max=800&anio_min=2018&anio_max=2024&destacado=true&search=faro&disponibilidad=disponible
+```
+
+### Admin: filtro completo con stock (GET)
+
+Usa varios filtros y ademas permite listar productos con stock exacto. Por ejemplo, `stock=0` muestra productos sin stock.
+
+```http
+GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toyota&modelo=Hilux&tipo_producto=faro&condicion=nuevo&precio_min=100&precio_max=800&anio_min=2018&anio_max=2024&destacado=true&search=faro&disponibilidad=proximamente&stock=0
 ```
 
 ### Opciones para combo boxes (GET)
@@ -666,6 +752,7 @@ GET http://localhost:3003/api/productos?categoria_id=1&marca=Toyota&modelo=Hilux
 Devuelve categorias, marcas, modelos, tipos, condiciones, anios y rangos para llenar filtros del frontend.
 
 ```http
+GET /api/productos/filtros-opciones
 GET http://localhost:3003/api/productos/filtros-opciones
 ```
 
@@ -680,4 +767,3 @@ Los `console.log` de productos son temporales y sirven para depurar durante desa
 ```
 
 Antes de produccion se pueden quitar o reemplazar por un logger controlado por entorno.
-

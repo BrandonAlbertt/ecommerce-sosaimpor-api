@@ -40,6 +40,11 @@ export async function listarProductosFiltrados(filters, pagination) {
     where.push(`p.precio <= $${values.length}`);
   }
 
+  if (filters.stock !== null) {
+    values.push(filters.stock);
+    where.push(`p.stock = $${values.length}`);
+  }
+
   if (filters.anio) {
     values.push(filters.anio);
     where.push(`p.anio = $${values.length}`);
@@ -58,6 +63,16 @@ export async function listarProductosFiltrados(filters, pagination) {
   if (filters.destacado !== null) {
     values.push(filters.destacado);
     where.push(`p.destacado = $${values.length}`);
+  }
+
+  if (filters.disponibilidad) {
+    if (filters.disponibilidad === "disponible") {
+      where.push("p.stock > 0");
+    }
+
+    if (filters.disponibilidad === "proximamente") {
+      where.push("p.stock = 0 AND p.proximamente = true");
+    }
   }
 
   if (filters.search) {
@@ -140,6 +155,7 @@ export async function obtenerOpcionesFiltrosProductos() {
     condicionesResult,
     aniosResult,
     preciosResult,
+    disponibilidadResult,
   ] = await Promise.all([
     pool.query(`
       SELECT DISTINCT c.id, c.nombre, c.slug
@@ -195,7 +211,25 @@ export async function obtenerOpcionesFiltrosProductos() {
       FROM productos p
       WHERE p.activo = true
     `),
+    pool.query(`
+      SELECT
+        BOOL_OR(p.stock > 0) AS tiene_disponibles,
+        BOOL_OR(p.stock = 0 AND p.proximamente = true) AS tiene_proximamente
+      FROM productos p
+      WHERE p.activo = true
+    `),
   ]);
+
+  const opcionesDisponibilidad = [];
+  const disponibilidad = disponibilidadResult.rows[0];
+
+  if (disponibilidad.tiene_disponibles) {
+    opcionesDisponibilidad.push("disponible");
+  }
+
+  if (disponibilidad.tiene_proximamente) {
+    opcionesDisponibilidad.push("proximamente");
+  }
 
   return {
     categorias: categoriasResult.rows,
@@ -208,5 +242,6 @@ export async function obtenerOpcionesFiltrosProductos() {
       precio_min: preciosResult.rows[0].precio_min,
       precio_max: preciosResult.rows[0].precio_max,
     },
+    disponibilidad: opcionesDisponibilidad,
   };
 }

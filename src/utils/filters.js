@@ -24,6 +24,11 @@ export function getProductFilters(query) {
     return null;
   };
 
+  const toLowerCaseString = (value) => {
+    const normalizedValue = toTrimmedString(value);
+    return normalizedValue ? normalizedValue.toLowerCase() : null;
+  };
+
   return {
     categoria_id: toNumber(query.categoria_id),
     marca: toTrimmedString(query.marca),
@@ -32,9 +37,11 @@ export function getProductFilters(query) {
     condicion: toTrimmedString(query.condicion),
     precio_min: toNumber(query.precio_min),
     precio_max: toNumber(query.precio_max),
+    stock: toNumber(query.stock),
     anio: toNumber(query.anio),
     anio_min: toNumber(query.anio_min),
     anio_max: toNumber(query.anio_max),
+    disponibilidad: toLowerCaseString(query.disponibilidad),
     destacado: toBoolean(query.destacado),
     search: toTrimmedString(query.search),
   };
