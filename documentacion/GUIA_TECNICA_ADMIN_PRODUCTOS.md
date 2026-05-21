@@ -19,6 +19,13 @@ y agregar una API separada para administracion:
 
 La ruta publica sigue mostrando solo productos activos. La ruta admin puede listar, crear, editar, activar y desactivar productos.
 
+Estado de visibilidad actual:
+
+```txt
+publico -> exige producto activo y categoria activa
+admin   -> puede ver productos activos e inactivos, incluso si su categoria esta inactiva
+```
+
 ## Archivos usados
 
 | Archivo | Responsabilidad |
@@ -201,6 +208,8 @@ listarProductosFiltrados(filters, pagination)
 ```
 
 Esta funcion publica no debe modificarse para admin porque fuerza productos activos.
+
+Ademas, la funcion publica aplica visibilidad por categoria activa. Esa regla no se copia al listado admin porque el admin debe conservar acceso a productos asociados a categorias inactivas.
 
 ## SQL de listado admin
 
@@ -611,7 +620,7 @@ PATCH /api/admin/productos/1/activar
 - Proteger rutas admin con autenticacion.
 - Agregar rol admin.
 - Agregar logs de auditoria para crear, editar, activar y desactivar.
-- Agregar CRUD admin para categorias.
+- CRUD admin para categorias ya existe en `/api/admin/categorias`; falta conectarlo al panel admin cuando se implemente frontend.
 - Agregar CRUD admin para producto_imagenes.
 - Agregar CRUD admin para producto_especificaciones.
 - Agregar tests automatizados para rutas admin.

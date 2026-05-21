@@ -3,11 +3,25 @@ import { pool } from "../config/db.js";
 // ESTE ARCHIVO LO LLAMA src/services/productos.service.js.
 // AQUI SE HACE LA CONSULTA REAL A POSTGRES CON FILTROS Y PAGINACION.
 // EL MODELO RECIBE LOS DATOS YA LIMPIOS Y LOS CONVIERTE EN SQL.
+
+/**
+ * LISTAR: OBTIENE LOS PRODUCTOS FILTRADOS Y PAGINADOS PARA EL FRONTEND.
+ * RECIBE LOS FILTROS APLICADOS POR EL USUARIO (CATEGORIA, MARCA, PRECIO, ETC).
+ * RETORNA UN OBJETO CON LOS PRODUCTOS Y EL TOTAL PARA CALCULAR PAGINAS.
+ */
 export async function listarProductosFiltrados(filters, pagination) {
   // ARRAY DE PARAMETROS: EVITA CONCATENAR SQL Y AYUDA A PREVENIR INJECTION.
   const values = [];
-  // BASE DE LA CONSULTA: SIEMPRE SOLO PRODUCTOS ACTIVOS.
-  const where = ["p.activo = true"];
+  // PUBLICO: SOLO PRODUCTOS ACTIVOS DE CATEGORIAS ACTIVAS.
+  const where = [
+    "p.activo = true",
+    `EXISTS (
+      SELECT 1
+      FROM categorias categoria_publica
+      WHERE categoria_publica.id = p.categoria_id
+        AND categoria_publica.activa = true
+    )`,
+  ];
 
   // SI VIENE categoria_id, SE AGREGA AL WHERE.
   if (filters.categoria_id) {
@@ -167,8 +181,11 @@ export async function listarProductosFiltrados(filters, pagination) {
   };
 }
 
-// obtenerOpcionesFiltrosProductos() LA LLAMA src/services/productos.service.js.
-// ESTA FUNCION SIRVE PARA LLENAR LOS FILTROS DEL FRONTEND CON VALORES REALES.
+/**
+ * OBTENER OPCIONES FILTROS: TRAE LOS VALORES UNICOS DISPONIBLES PARA CADA FILTRO.
+ * SE USA PARA LLENAR LOS DROPDOWNS Y SELECTORES DEL FRONTEND CON DATOS REALES.
+ * INCLUYE CATEGORIAS, MARCAS, MODELOS, TIPOS, CONDICIONES, AÑOS Y PRECIOS MIN/MAX.
+ */
 export async function obtenerOpcionesFiltrosProductos() {
   const [
     categoriasResult,
@@ -192,6 +209,12 @@ export async function obtenerOpcionesFiltrosProductos() {
       SELECT DISTINCT p.marca AS value
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
         AND p.marca IS NOT NULL
         AND BTRIM(p.marca) <> ''
       ORDER BY p.marca ASC
@@ -200,6 +223,12 @@ export async function obtenerOpcionesFiltrosProductos() {
       SELECT DISTINCT p.modelo AS value
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
         AND p.modelo IS NOT NULL
         AND BTRIM(p.modelo) <> ''
       ORDER BY p.modelo ASC
@@ -208,6 +237,12 @@ export async function obtenerOpcionesFiltrosProductos() {
       SELECT DISTINCT p.tipo_producto AS value
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
         AND p.tipo_producto IS NOT NULL
         AND BTRIM(p.tipo_producto) <> ''
       ORDER BY p.tipo_producto ASC
@@ -216,6 +251,12 @@ export async function obtenerOpcionesFiltrosProductos() {
       SELECT DISTINCT p.condicion AS value
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
         AND p.condicion IS NOT NULL
         AND BTRIM(p.condicion) <> ''
       ORDER BY p.condicion ASC
@@ -224,6 +265,12 @@ export async function obtenerOpcionesFiltrosProductos() {
       SELECT DISTINCT p.anio AS value
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
         AND p.anio IS NOT NULL
       ORDER BY p.anio DESC
     `),
@@ -233,6 +280,12 @@ export async function obtenerOpcionesFiltrosProductos() {
         MAX(p.precio)::numeric AS precio_max
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
     `),
     pool.query(`
       SELECT
@@ -240,6 +293,12 @@ export async function obtenerOpcionesFiltrosProductos() {
         BOOL_OR(p.stock = 0 AND p.proximamente = true) AS tiene_proximamente
       FROM productos p
       WHERE p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias c
+          WHERE c.id = p.categoria_id
+            AND c.activa = true
+        )
     `),
   ]);
 
@@ -266,6 +325,111 @@ export async function obtenerOpcionesFiltrosProductos() {
       precio_max: preciosResult.rows[0].precio_max,
     },
     disponibilidad: opcionesDisponibilidad,
+  };
+}
+
+export async function obtenerOpcionesFiltrosProductosAdmin() {
+  const [
+    categoriasResult,
+    marcasResult,
+    modelosResult,
+    tiposProductoResult,
+    condicionesResult,
+    aniosResult,
+    preciosResult,
+    disponibilidadResult,
+    activosResult,
+    destacadosResult,
+  ] = await Promise.all([
+    pool.query(`
+      SELECT DISTINCT c.id, c.nombre, c.slug, c.activa
+      FROM categorias c
+      INNER JOIN productos p ON p.categoria_id = c.id
+      ORDER BY c.nombre ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.marca AS value
+      FROM productos p
+      WHERE p.marca IS NOT NULL
+        AND BTRIM(p.marca) <> ''
+      ORDER BY p.marca ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.modelo AS value
+      FROM productos p
+      WHERE p.modelo IS NOT NULL
+        AND BTRIM(p.modelo) <> ''
+      ORDER BY p.modelo ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.tipo_producto AS value
+      FROM productos p
+      WHERE p.tipo_producto IS NOT NULL
+        AND BTRIM(p.tipo_producto) <> ''
+      ORDER BY p.tipo_producto ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.condicion AS value
+      FROM productos p
+      WHERE p.condicion IS NOT NULL
+        AND BTRIM(p.condicion) <> ''
+      ORDER BY p.condicion ASC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.anio AS value
+      FROM productos p
+      WHERE p.anio IS NOT NULL
+      ORDER BY p.anio DESC
+    `),
+    pool.query(`
+      SELECT
+        MIN(p.precio)::numeric AS precio_min,
+        MAX(p.precio)::numeric AS precio_max
+      FROM productos p
+    `),
+    pool.query(`
+      SELECT
+        BOOL_OR(p.stock > 0) AS tiene_disponibles,
+        BOOL_OR(p.stock = 0 AND p.proximamente = true) AS tiene_proximamente
+      FROM productos p
+    `),
+    pool.query(`
+      SELECT DISTINCT p.activo AS value
+      FROM productos p
+      ORDER BY p.activo DESC
+    `),
+    pool.query(`
+      SELECT DISTINCT p.destacado AS value
+      FROM productos p
+      ORDER BY p.destacado DESC
+    `),
+  ]);
+
+  const opcionesDisponibilidad = [];
+  const disponibilidad = disponibilidadResult.rows[0];
+
+  if (disponibilidad.tiene_disponibles) {
+    opcionesDisponibilidad.push("disponible");
+  }
+
+  if (disponibilidad.tiene_proximamente) {
+    opcionesDisponibilidad.push("proximamente");
+  }
+
+  return {
+    categorias: categoriasResult.rows,
+    marcas: marcasResult.rows.map((row) => row.value),
+    modelos: modelosResult.rows.map((row) => row.value),
+    tipos_producto: tiposProductoResult.rows.map((row) => row.value),
+    condiciones: condicionesResult.rows.map((row) => row.value),
+    anios: aniosResult.rows.map((row) => row.value),
+    precios: {
+      precio_min: preciosResult.rows[0].precio_min,
+      precio_max: preciosResult.rows[0].precio_max,
+    },
+    disponibilidad: opcionesDisponibilidad,
+    activos: activosResult.rows.map((row) => row.value),
+    destacados: destacadosResult.rows.map((row) => row.value),
   };
 }
 
@@ -390,6 +554,11 @@ function agregarFiltrosAdmin(filters, values, where) {
   }
 }
 
+/**
+ * LISTAR ADMIN: OBTIENE LA LISTA DE PRODUCTOS PARA EL PANEL DE ADMINISTRACIÓN.
+ * UTILIZA LOS MISMOS FILTROS QUE EL FRONTEND PERO INCLUYE CAMPOS ADICIONALES.
+ * RETORNA PRODUCTOS CON INFORMACION COMPLETA INCLUYENDO ESTADO Y ORDEN.
+ */
 export async function listarProductosAdminFiltrados(filters, pagination) {
   const values = [];
   const where = [];
@@ -432,6 +601,11 @@ export async function listarProductosAdminFiltrados(filters, pagination) {
   };
 }
 
+/**
+ * OBTENER PRODUCTO ADMIN: TRAE UN PRODUCTO ESPECIFICO CON TODOS SUS DATOS.
+ * SE USA DESDE EL ADMIN PARA MOSTRAR O EDITAR UN PRODUCTO INDIVIDUAL.
+ * RETORNA TODA LA INFORMACION DEL PRODUCTO O NULL SI NO EXISTE.
+ */
 export async function obtenerProductoAdminPorId(id) {
   const result = await pool.query(
     `
@@ -476,6 +650,11 @@ const adminProductColumns = [
   "activo",
 ];
 
+/**
+ * CREAR: INSERTA UN NUEVO PRODUCTO EN LA BASE DE DATOS.
+ * RECIBE LOS DATOS DEL PRODUCTO Y LOS GUARDA DIRECTAMENTE.
+ * RETORNA EL PRODUCTO CREADO CON TODOS SUS DATOS INCLUYENDO EL ID ASIGNADO.
+ */
 export async function crearProductoAdmin(data) {
   const columns = adminProductColumns.filter((column) =>
     Object.prototype.hasOwnProperty.call(data, column)
@@ -495,6 +674,11 @@ export async function crearProductoAdmin(data) {
   return obtenerProductoAdminPorId(result.rows[0].id);
 }
 
+/**
+ * EDITAR: ACTUALIZA UN PRODUCTO EXISTENTE CON LOS NUEVOS DATOS.
+ * SOLO ACTUALIZA LOS CAMPOS QUE VIENEN EN EL OBJETO DATA.
+ * RETORNA EL PRODUCTO ACTUALIZADO CON TODOS SUS DATOS ACTUALES.
+ */
 export async function actualizarProductoAdmin(id, data) {
   const columns = adminProductColumns.filter((column) =>
     Object.prototype.hasOwnProperty.call(data, column)
@@ -528,6 +712,11 @@ export async function actualizarProductoAdmin(id, data) {
   return obtenerProductoAdminPorId(id);
 }
 
+/**
+ * DESACTIVAR: MARCA UN PRODUCTO COMO INACTIVO SIN ELIMINARLO DE LA BD.
+ * ESTO LO OCULTA DEL FRONTEND Y DEL ADMIN PERO CONSERVA EL REGISTRO.
+ * RETORNA EL PRODUCTO DESACTIVADO O NULL SI NO EXISTE.
+ */
 export async function desactivarProductoAdmin(id) {
   const result = await pool.query(
     "UPDATE productos SET activo = false WHERE id = $1 RETURNING id",
@@ -541,6 +730,11 @@ export async function desactivarProductoAdmin(id) {
   return obtenerProductoAdminPorId(id);
 }
 
+/**
+ * ACTIVAR: MARCA UN PRODUCTO COMO ACTIVO PARA QUE SEA VISIBLE.
+ * ESTO HACE QUE APAREZCA EN EL FRONTEND Y ESTE DISPONIBLE PARA COMPRA.
+ * RETORNA EL PRODUCTO ACTIVADO O NULL SI NO EXISTE.
+ */
 export async function activarProductoAdmin(id) {
   const result = await pool.query(
     "UPDATE productos SET activo = true WHERE id = $1 RETURNING id",

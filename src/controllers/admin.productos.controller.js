@@ -3,6 +3,7 @@ import {
   actualizarProducto,
   crearProducto,
   desactivarProducto,
+  obtenerFiltrosProductosAdmin,
   obtenerProductoAdmin,
   obtenerProductosAdmin,
 } from "../services/admin.productos.service.js";
@@ -12,6 +13,15 @@ export async function listarProductosAdmin(req, res, next) {
   try {
     const resultado = await obtenerProductosAdmin(req.query);
     res.json(successResponse(resultado.data, resultado.pagination));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listarFiltrosProductosAdmin(_req, res, next) {
+  try {
+    const filtros = await obtenerFiltrosProductosAdmin();
+    res.json(successResponse(filtros));
   } catch (error) {
     next(error);
   }

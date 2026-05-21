@@ -215,11 +215,24 @@ productos.categoria_id REFERENCES categorias(id)
 | `disponibilidad` | Texto | `stock > 0` o `stock = 0 AND proximamente = true` |
 | `search` | Texto | Busca con `ILIKE` |
 
-Siempre se filtra:
+Siempre se filtra la visibilidad publica:
 
 ```sql
 p.activo = true
 ```
+
+y la categoria del producto debe existir y estar activa:
+
+```sql
+EXISTS (
+  SELECT 1
+  FROM categorias categoria_publica
+  WHERE categoria_publica.id = p.categoria_id
+    AND categoria_publica.activa = true
+)
+```
+
+Esta regla aplica a `GET /api/productos`: si admin desactiva una categoria, los productos asociados no se eliminan, pero dejan de aparecer al usuario publico. La API admin de productos no usa esta restriccion.
 
 ## Rutas
 
@@ -378,7 +391,15 @@ En `src/models/productos.model.js` se construye el `WHERE` con arrays:
 
 ```js
 const values = [];
-const where = ["p.activo = true"];
+const where = [
+  "p.activo = true",
+  `EXISTS (
+    SELECT 1
+    FROM categorias categoria_publica
+    WHERE categoria_publica.id = p.categoria_id
+      AND categoria_publica.activa = true
+  )`,
+];
 ```
 
 Cada filtro agrega un valor parametrizado y una condicion:
@@ -532,6 +553,18 @@ Se hacen dos consultas para poder devolver:
 }
 ```
 
+### Visibilidad publica por estado
+
+La ruta publica filtra en backend, no en frontend:
+
+```txt
+producto activo + categoria activa -> puede aparecer al usuario
+producto inactivo                 -> no aparece al usuario
+categoria inactiva                -> sus productos no aparecen al usuario
+```
+
+Los registros no se borran por esa regla. El admin conserva productos, categorias, imagenes y especificaciones para editarlos o reactivarlos.
+
 ## Opciones de filtros
 
 La ruta:
@@ -639,7 +672,10 @@ const pagination = getPagination(query);
 
 ```js
 const values = [];
-const where = ["p.activo = true"];
+const where = [
+  "p.activo = true",
+  "regla de visibilidad de la entidad padre si aplica",
+];
 ```
 
 6. Agrega cada filtro con parametros SQL:
@@ -678,6 +714,14 @@ Los `console.log` actuales ayudan durante desarrollo:
 ```
 
 Antes de produccion se pueden quitar o reemplazar por un logger controlado por entorno.
+
+Regla de negocio actual para productos publicos:
+
+```txt
+no confiar en el frontend para ocultar datos
+filtrar producto activo y categoria activa en la API publica
+dejar el admin con acceso a registros activos e inactivos
+```
 
 ## Recomendaciones para autocomplete
 

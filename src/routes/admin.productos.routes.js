@@ -4,6 +4,7 @@ import {
   actualizarProductoAdminController,
   crearProductoAdminController,
   desactivarProductoAdminController,
+  listarFiltrosProductosAdmin,
   listarProductosAdmin,
   obtenerProductoAdminPorIdController,
 } from "../controllers/admin.productos.controller.js";
@@ -11,6 +12,7 @@ import {
 const router = Router();
 
 router.get("/", listarProductosAdmin);
+router.get("/filtros-opciones", listarFiltrosProductosAdmin);
 router.get("/:id", obtenerProductoAdminPorIdController);
 router.post("/", crearProductoAdminController);
 router.put("/:id", actualizarProductoAdminController);

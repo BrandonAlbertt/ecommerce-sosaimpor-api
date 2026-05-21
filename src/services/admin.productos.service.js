@@ -7,6 +7,7 @@ import {
   crearProductoAdmin,
   desactivarProductoAdmin,
   listarProductosAdminFiltrados,
+  obtenerOpcionesFiltrosProductosAdmin,
   obtenerProductoAdminPorId,
 } from "../models/productos.model.js";
 
@@ -196,6 +197,10 @@ export async function obtenerProductosAdmin(query) {
       hasPrevPage: pagination.page > 1,
     },
   };
+}
+
+export async function obtenerFiltrosProductosAdmin() {
+  return obtenerOpcionesFiltrosProductosAdmin();
 }
 
 export async function obtenerProductoAdmin(id) {

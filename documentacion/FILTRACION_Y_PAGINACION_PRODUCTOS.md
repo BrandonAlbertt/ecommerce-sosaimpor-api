@@ -87,6 +87,24 @@ Devuelve categorias, marcas, modelos, tipos, condiciones, anios, rango de precio
 
 ## Reglas importantes
 
+La ruta publica de productos solo devuelve productos visibles para usuarios:
+
+```txt
+producto activo
+categoria activa
+```
+
+Regla interna:
+
+```txt
+productos.activo = true
+categorias.activa = true
+```
+
+Si el admin desactiva una categoria, sus productos no se borran, pero dejan de aparecer en el listado, filtros y busqueda publica mientras la categoria siga inactiva.
+
+Si el admin desactiva un producto, ese producto deja de aparecer al usuario aunque su categoria siga activa.
+
 `disponibilidad` acepta:
 
 ```txt
@@ -288,3 +306,4 @@ GET http://localhost:3003/api/productos?page=1&limit=12&categoria_id=1&marca=Toy
 - La busqueda `search` es texto libre; los demas filtros deberian venir de selects, sliders o inputs controlados.
 - Para autocomplete, no cargues todos los productos en el frontend. Consulta la API con `search`, `page=1` y un `limit` pequeno como `4` o `5`.
 - Si quieres mostrar imagen en sugerencias, usa `imagen_principal` y muestra una miniatura pequena. Para un servidor gratuito, es mejor usar imagenes comprimidas o thumbnails.
+- El frontend publico no debe intentar mostrar productos ocultos por estados admin. La API publica ya filtra por producto activo y categoria activa.

@@ -22,6 +22,14 @@ GET /api/productos
 
 La ruta publica muestra solo productos activos. La ruta admin puede mostrar productos activos e inactivos.
 
+Regla adicional publica actual:
+
+```txt
+GET /api/productos solo muestra productos con producto activo y categoria activa.
+```
+
+La ruta admin no oculta productos porque su categoria este inactiva. Eso permite revisar, editar o reactivar datos desde el panel.
+
 > Importante: estas rutas admin todavia no tienen autenticacion. Mas adelante deben protegerse con `authMiddleware` y rol admin.
 
 ## Respuesta del listado
@@ -125,6 +133,8 @@ Solo inactivos:
 ```http
 GET /api/admin/productos?activo=false&page=1&limit=20
 ```
+
+Una categoria inactiva no borra productos asociados. En admin esos productos se siguen listando y conservan `categoria_id` y `categoria_nombre`.
 
 ## Rutas principales
 
@@ -398,6 +408,7 @@ Caracteristicas:
 
 ```txt
 solo productos activos
+solo productos cuya categoria esta activa
 campos pensados para frontend publico
 no permite crear, editar, activar ni desactivar
 ```
@@ -412,9 +423,26 @@ Caracteristicas:
 
 ```txt
 productos activos e inactivos
+productos asociados a categorias activas o inactivas
 campos completos
 permite crear, editar, activar y desactivar
 ```
+
+## Rutas relacionadas de categorias admin
+
+Para que el formulario admin de producto pueda seleccionar y administrar categorias, ya existe:
+
+```http
+GET    /api/admin/categorias
+GET    /api/admin/categorias/:id
+POST   /api/admin/categorias
+PUT    /api/admin/categorias/:id
+PATCH  /api/admin/categorias/:id/desactivar
+PATCH  /api/admin/categorias/:id/activar
+DELETE /api/admin/categorias/:id
+```
+
+Al crear o editar producto, `categoria_id` se valida contra la tabla `categorias`.
 
 ## Flujo recomendado en el panel admin
 
