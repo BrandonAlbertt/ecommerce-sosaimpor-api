@@ -515,6 +515,33 @@ Ruta final:
   PUT /api/admin/productos/15/imagenes/8/reemplazar
 ```
 
+## Mapa rapido de uso
+
+Estas son las acciones que normalmente tendra el admin:
+
+| Accion admin | Ruta | Body |
+| --- | --- | --- |
+| Cargar galeria de un producto | `GET /api/admin/productos/:productoId/imagenes` | Sin body |
+| Ver una imagen puntual | `GET /api/admin/productos/:productoId/imagenes/:imagenId` | Sin body |
+| Subir nueva imagen | `POST /api/admin/productos/:productoId/imagenes` | `form-data` con archivo |
+| Cambiar orden | `PUT /api/admin/productos/:productoId/imagenes/:imagenId` | JSON con `orden` |
+| Hacer principal | `PATCH /api/admin/productos/:productoId/imagenes/:imagenId/principal` | Sin body |
+| Cambiar archivo equivocado | `PUT /api/admin/productos/:productoId/imagenes/:imagenId/reemplazar` | `form-data` con archivo |
+| Eliminar imagen | `DELETE /api/admin/productos/:productoId/imagenes/:imagenId` | Sin body |
+
+Importante:
+
+```txt
+PUT /:imagenId
+  edita campos de la fila sin cambiar el archivo
+  actualmente edita orden
+
+PUT /:imagenId/reemplazar
+  cambia el archivo real
+  sube una imagen nueva a Cloudinary
+  cambia imagen_url y public_id
+```
+
 ## Formato de respuesta
 
 Las respuestas exitosas usan:
@@ -1133,6 +1160,532 @@ DB guarda imagen_url y public_id
 solo la imagen elegida queda principal=true
 reemplazar cambia URL y public_id
 DELETE quita fila y archivo Cloudinary cuando tenia public_id
+```
+
+## Probar rutas con Postman
+
+Esta seccion sirve como guia de prueba ruta por ruta.
+
+Usa como host local:
+
+```txt
+http://localhost:3003
+```
+
+Antes de probar:
+
+```txt
+la API debe estar levantada
+el producto debe existir
+CLOUDINARY_URL debe estar configurado para POST y reemplazar
+```
+
+Los ejemplos usan:
+
+```txt
+productoId = 2
+imagenId = 201
+```
+
+Si tu respuesta al subir una imagen fue:
+
+```json
+{
+  "id": 201,
+  "producto_id": 2
+}
+```
+
+entonces:
+
+```txt
+productoId sale de producto_id -> 2
+imagenId sale de id -> 201
+```
+
+### Postman 1: listar imagenes del producto
+
+Uso:
+
+```txt
+ver la galeria del producto
+confirmar ids, orden y cual es principal
+```
+
+Metodo:
+
+```http
+GET
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes
+```
+
+Body:
+
+```txt
+sin body
+```
+
+Postman:
+
+```txt
+1. crea request nueva
+2. elige GET
+3. pega la URL
+4. presiona Send
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "id": 201,
+      "producto_id": 2,
+      "imagen_url": "https://res.cloudinary.com/...",
+      "public_id": "sosaimpor/productos/2/...",
+      "principal": false,
+      "orden": 6,
+      "creado_en": "2026-05-21T12:20:17.197Z"
+    }
+  ],
+  "pagination": null
+}
+```
+
+### Postman 2: ver una imagen por id
+
+Uso:
+
+```txt
+ver la fila de una imagen puntual
+confirmar que pertenece a ese producto
+```
+
+Metodo:
+
+```http
+GET
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes/201
+```
+
+Body:
+
+```txt
+sin body
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/...",
+    "public_id": "sosaimpor/productos/2/...",
+    "principal": false,
+    "orden": 6,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+### Postman 3: subir imagen nueva
+
+Uso:
+
+```txt
+agregar una imagen al producto desde admin
+```
+
+Metodo:
+
+```http
+POST
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes
+```
+
+Body en Postman:
+
+```txt
+Body -> form-data
+```
+
+Campos:
+
+| Key | Type | Value ejemplo |
+| --- | --- | --- |
+| `imagen` | File | Selecciona `foto-producto.webp` |
+| `principal` | Text | `false` |
+| `orden` | Text | `6` |
+
+Postman:
+
+```txt
+1. elige POST
+2. abre Body
+3. marca form-data
+4. crea key imagen
+5. cambia el tipo de imagen de Text a File
+6. selecciona el archivo
+7. agrega principal como Text
+8. agrega orden como Text
+9. presiona Send
+```
+
+No uses:
+
+```txt
+raw JSON
+binary
+x-www-form-urlencoded
+```
+
+para subir esta imagen.
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/dqt75zrm1/image/upload/...",
+    "public_id": "sosaimpor/productos/2/archivo-generado",
+    "principal": false,
+    "orden": 6,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+Al terminar verifica:
+
+```txt
+imagen_url ya apunta a Cloudinary
+public_id ya no esta vacio
+la imagen aparece en Cloudinary
+la fila aparece en producto_imagenes
+```
+
+### Postman 4: editar campos sin cambiar archivo
+
+Uso:
+
+```txt
+cambiar metadatos de la fila
+no reemplaza la imagen
+```
+
+Actualmente esta ruta edita:
+
+```txt
+orden
+```
+
+Metodo:
+
+```http
+PUT
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes/201
+```
+
+Body en Postman:
+
+```txt
+Body -> raw -> JSON
+```
+
+Header:
+
+```txt
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "orden": 1
+}
+```
+
+Postman:
+
+```txt
+1. elige PUT
+2. pega la URL sin /reemplazar
+3. abre Body
+4. marca raw
+5. elige JSON
+6. envia orden
+7. presiona Send
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/...",
+    "public_id": "sosaimpor/productos/2/...",
+    "principal": false,
+    "orden": 1,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+Debes ver:
+
+```txt
+orden cambia
+imagen_url queda igual
+public_id queda igual
+```
+
+### Postman 5: marcar imagen principal
+
+Uso:
+
+```txt
+poner una imagen como portada del producto
+```
+
+Metodo:
+
+```http
+PATCH
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes/201/principal
+```
+
+Body:
+
+```txt
+sin body
+```
+
+Postman:
+
+```txt
+1. elige PATCH
+2. pega la URL terminada en /principal
+3. no envies body
+4. presiona Send
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/...",
+    "public_id": "sosaimpor/productos/2/...",
+    "principal": true,
+    "orden": 1,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+Al terminar consulta el listado:
+
+```http
+GET http://localhost:3003/api/admin/productos/2/imagenes
+```
+
+Debes ver:
+
+```txt
+imagen 201 -> principal=true
+las otras imagenes del producto -> principal=false
+```
+
+### Postman 6: cambiar imagen equivocada
+
+Uso:
+
+```txt
+reemplazar el archivo que se subio por error
+mantener el mismo registro de DB
+```
+
+Metodo:
+
+```http
+PUT
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes/201/reemplazar
+```
+
+Body en Postman:
+
+```txt
+Body -> form-data
+```
+
+Campo:
+
+| Key | Type | Value ejemplo |
+| --- | --- | --- |
+| `imagen` | File | Selecciona la imagen correcta |
+
+Postman:
+
+```txt
+1. elige PUT
+2. pega la URL terminada en /reemplazar
+3. abre Body
+4. marca form-data
+5. crea key imagen
+6. cambia el tipo a File
+7. selecciona el archivo correcto
+8. presiona Send
+```
+
+No envies:
+
+```txt
+imagen_url manual
+public_id manual
+raw JSON con archivo
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/.../imagen-nueva.webp",
+    "public_id": "sosaimpor/productos/2/public-id-nuevo",
+    "principal": true,
+    "orden": 1,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+Debes ver:
+
+```txt
+id queda igual
+producto_id queda igual
+orden queda igual
+principal queda igual
+imagen_url cambia
+public_id cambia
+```
+
+La API intenta borrar de Cloudinary la imagen anterior cuando tenia `public_id`.
+
+### Postman 7: eliminar imagen
+
+Uso:
+
+```txt
+quitar una imagen del producto
+```
+
+Metodo:
+
+```http
+DELETE
+```
+
+URL:
+
+```http
+http://localhost:3003/api/admin/productos/2/imagenes/201
+```
+
+Body:
+
+```txt
+sin body
+```
+
+Postman:
+
+```txt
+1. elige DELETE
+2. pega la URL
+3. no envies body
+4. presiona Send
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": 201,
+    "producto_id": 2,
+    "imagen_url": "https://res.cloudinary.com/...",
+    "public_id": "sosaimpor/productos/2/...",
+    "principal": true,
+    "orden": 1,
+    "creado_en": "2026-05-21T12:20:17.197Z"
+  },
+  "pagination": null
+}
+```
+
+La respuesta muestra la fila que se elimino.
+
+Al terminar verifica:
+
+```txt
+GET por id debe devolver Imagen no encontrada
+GET listado ya no debe incluir imagen 201
+Cloudinary ya no debe conservar la imagen si tenia public_id
 ```
 
 ## Errores comunes
