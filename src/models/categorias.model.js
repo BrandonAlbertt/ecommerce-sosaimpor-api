@@ -10,7 +10,26 @@ const categoriaSelectFields = `
   color_texto_hex,
   destacada,
   orden_destacado,
-  visitas,
+  COALESCE((
+    SELECT cm.vistas
+    FROM categoria_metricas cm
+    WHERE cm.categoria_id = categorias.id
+    LIMIT 1
+  ), 0) AS visitas,
+  activa,
+  creado_en
+`;
+
+const categoriaPublicSelectFields = `
+  id,
+  nombre,
+  slug,
+  descripcion,
+  imagen_url,
+  color_hex,
+  color_texto_hex,
+  destacada,
+  orden_destacado,
   activa,
   creado_en
 `;
@@ -26,6 +45,9 @@ const categoriaColumns = [
   "orden_destacado",
   "activa",
 ];
+
+const CATEGORIAS_DESTACADAS_DEFAULT_LIMIT = 8;
+const CATEGORIAS_DESTACADAS_LIMIT_COLUMN = "featured_categories_limit";
 
 export async function listarCategoriasAdminFiltradas(filters, pagination) {
   const values = [];
@@ -83,6 +105,60 @@ export async function listarCategoriasAdminFiltradas(filters, pagination) {
   return {
     categorias: categoriasResult.rows,
     total,
+  };
+}
+
+export async function listarCategoriasDestacadas(limit = 8) {
+  const result = await pool.query(
+    `
+      SELECT ${categoriaPublicSelectFields}
+      FROM categorias
+      WHERE activa = true
+        AND destacada = true
+      ORDER BY orden_destacado ASC NULLS LAST, RANDOM()
+      LIMIT $1
+    `,
+    [limit]
+  );
+
+  return result.rows;
+}
+
+export async function obtenerLimiteCategoriasDestacadasConfig() {
+  const result = await pool.query(
+    `
+      SELECT ${CATEGORIAS_DESTACADAS_LIMIT_COLUMN} AS limit
+      FROM home_config
+      WHERE is_active = true
+      ORDER BY id ASC
+      LIMIT 1
+    `
+  );
+
+  const limit = Number.parseInt(result.rows[0]?.limit, 10);
+
+  return Number.isInteger(limit) && limit > 0
+    ? limit
+    : CATEGORIAS_DESTACADAS_DEFAULT_LIMIT;
+}
+
+export async function actualizarLimiteCategoriasDestacadasConfig(limit) {
+  const result = await pool.query(
+    `
+      UPDATE home_config
+      SET ${CATEGORIAS_DESTACADAS_LIMIT_COLUMN} = $1
+      WHERE is_active = true
+      RETURNING ${CATEGORIAS_DESTACADAS_LIMIT_COLUMN} AS limit
+    `,
+    [limit]
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return {
+    limit: Number.parseInt(result.rows[0].limit, 10),
   };
 }
 

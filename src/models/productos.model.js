@@ -1,6 +1,6 @@
 import { pool } from "../config/db.js";
 
-// ESTE ARCHIVO LO LLAMA src/services/productos.service.js.
+// ESTE ARCHIVO LO LLAMA src/services/usuario.productos.service.js.
 // AQUI SE HACE LA CONSULTA REAL A POSTGRES CON FILTROS Y PAGINACION.
 // EL MODELO RECIBE LOS DATOS YA LIMPIOS Y LOS CONVIERTE EN SQL.
 
@@ -158,13 +158,46 @@ export async function listarProductosFiltrados(filters, pagination) {
       p.destacado,
       p.categoria_id,
       c.nombre AS categoria_nombre,
+      c.color_hex,
+      c.color_texto_hex,
       (
         SELECT pi.imagen_url
         FROM producto_imagenes pi
         WHERE pi.producto_id = p.id
         ORDER BY pi.principal DESC, pi.orden ASC
         LIMIT 1
-      ) AS imagen_principal
+      ) AS imagen_principal,
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', pi.id,
+              'imagen_url', pi.imagen_url,
+              'principal', pi.principal,
+              'orden', pi.orden
+            )
+            ORDER BY pi.principal DESC, pi.orden ASC, pi.id ASC
+          )
+          FROM producto_imagenes pi
+          WHERE pi.producto_id = p.id
+        ),
+        '[]'::json
+      ) AS imagenes,
+      COALESCE(
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', pe.id,
+              'nombre', pe.nombre,
+              'valor', pe.valor
+            )
+            ORDER BY pe.id ASC
+          )
+          FROM producto_especificaciones pe
+          WHERE pe.producto_id = p.id
+        ),
+        '[]'::json
+      ) AS especificaciones
     FROM productos p
     LEFT JOIN categorias c ON c.id = p.categoria_id
     ${whereSQL}
@@ -179,6 +212,88 @@ export async function listarProductosFiltrados(filters, pagination) {
     productos: productosResult.rows,
     total,
   };
+}
+
+/**
+ * OBTENER PRODUCTO PUBLICO: TRAE UN PRODUCTO ACTIVO POR SLUG.
+ * SE USA EN LA PAGINA /productos/[slug] DEL FRONTEND.
+ */
+export async function obtenerProductoPublicoPorSlug(slug) {
+  const result = await pool.query(
+    `
+      SELECT
+        p.id,
+        p.nombre,
+        p.slug,
+        p.descripcion,
+        p.tipo_producto,
+        p.marca,
+        p.modelo,
+        p.anio,
+        p.codigo_producto,
+        p.condicion,
+        p.precio,
+        p.stock,
+        p.proximamente,
+        p.destacado,
+        p.categoria_id,
+        c.nombre AS categoria_nombre,
+        c.color_hex,
+        c.color_texto_hex,
+        (
+          SELECT pi.imagen_url
+          FROM producto_imagenes pi
+          WHERE pi.producto_id = p.id
+          ORDER BY pi.principal DESC, pi.orden ASC
+          LIMIT 1
+        ) AS imagen_principal,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', pi.id,
+                'imagen_url', pi.imagen_url,
+                'principal', pi.principal,
+                'orden', pi.orden
+              )
+              ORDER BY pi.principal DESC, pi.orden ASC, pi.id ASC
+            )
+            FROM producto_imagenes pi
+            WHERE pi.producto_id = p.id
+          ),
+          '[]'::json
+        ) AS imagenes,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', pe.id,
+                'nombre', pe.nombre,
+                'valor', pe.valor
+              )
+              ORDER BY pe.id ASC
+            )
+            FROM producto_especificaciones pe
+            WHERE pe.producto_id = p.id
+          ),
+          '[]'::json
+        ) AS especificaciones
+      FROM productos p
+      LEFT JOIN categorias c ON c.id = p.categoria_id
+      WHERE LOWER(p.slug) = LOWER($1)
+        AND p.activo = true
+        AND EXISTS (
+          SELECT 1
+          FROM categorias categoria_publica
+          WHERE categoria_publica.id = p.categoria_id
+            AND categoria_publica.activa = true
+        )
+      LIMIT 1
+    `,
+    [slug]
+  );
+
+  return result.rows[0] || null;
 }
 
 /**
@@ -437,6 +552,8 @@ const adminSelectFields = `
   p.id,
   p.categoria_id,
   c.nombre AS categoria_nombre,
+  c.color_hex,
+  c.color_texto_hex,
   p.nombre,
   p.slug,
   p.descripcion,
@@ -451,8 +568,11 @@ const adminSelectFields = `
   p.proximamente,
   p.destacado,
   p.orden_destacado,
-  p.visitas,
-  p.consultas,
+  COALESCE(pm.vistas, 0) AS vistas,
+  COALESCE(pm.clicks, 0) AS clicks,
+  COALESCE(pm.veces_favorito, 0) AS veces_favorito,
+  COALESCE(pm.veces_agregado_carrito, 0) AS veces_agregado_carrito,
+  COALESCE(pm.veces_comprado, 0) AS veces_comprado,
   p.activo,
   p.creado_en,
   (
@@ -461,7 +581,38 @@ const adminSelectFields = `
     WHERE pi.producto_id = p.id
     ORDER BY pi.principal DESC, pi.orden ASC
     LIMIT 1
-  ) AS imagen_principal
+  ) AS imagen_principal,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', pi.id,
+          'imagen_url', pi.imagen_url,
+          'principal', pi.principal,
+          'orden', pi.orden
+        )
+        ORDER BY pi.principal DESC, pi.orden ASC, pi.id ASC
+      )
+      FROM producto_imagenes pi
+      WHERE pi.producto_id = p.id
+    ),
+    '[]'::json
+  ) AS imagenes,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', pe.id,
+          'nombre', pe.nombre,
+          'valor', pe.valor
+        )
+        ORDER BY pe.id ASC
+      )
+      FROM producto_especificaciones pe
+      WHERE pe.producto_id = p.id
+    ),
+    '[]'::json
+  ) AS especificaciones
 `;
 
 function agregarFiltrosAdmin(filters, values, where) {
@@ -587,6 +738,7 @@ export async function listarProductosAdminFiltrados(filters, pagination) {
       ${adminSelectFields}
     FROM productos p
     LEFT JOIN categorias c ON c.id = p.categoria_id
+    LEFT JOIN producto_metricas pm ON pm.producto_id = p.id
     ${whereSQL}
     ORDER BY p.creado_en DESC, p.id DESC
     LIMIT $${limitIndex}
@@ -613,6 +765,7 @@ export async function obtenerProductoAdminPorId(id) {
         ${adminSelectFields}
       FROM productos p
       LEFT JOIN categorias c ON c.id = p.categoria_id
+      LEFT JOIN producto_metricas pm ON pm.producto_id = p.id
       WHERE p.id = $1
       LIMIT 1
     `,

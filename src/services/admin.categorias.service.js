@@ -2,9 +2,11 @@ import { getPagination } from "../utils/pagination.js";
 import {
   activarCategoriaAdmin,
   actualizarCategoriaAdmin,
+  actualizarLimiteCategoriasDestacadasConfig,
   crearCategoriaAdmin,
   desactivarCategoriaAdmin,
   listarCategoriasAdminFiltradas,
+  obtenerLimiteCategoriasDestacadasConfig,
   obtenerCategoriaAdminPorId,
 } from "../models/categorias.model.js";
 
@@ -19,6 +21,8 @@ const allowedCategoryFields = [
   "orden_destacado",
   "activa",
 ];
+const MIN_DESTACADAS_LIMIT = 1;
+const MAX_DESTACADAS_LIMIT = 50;
 
 function createHttpError(message, statusCode = 400) {
   const error = new Error(message);
@@ -85,6 +89,22 @@ function parseCategoriaId(id) {
   }
 
   return numericId;
+}
+
+function parseDestacadasLimit(value) {
+  const limit = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(limit)) {
+    throw createHttpError("limit debe ser un numero entero");
+  }
+
+  if (limit < MIN_DESTACADAS_LIMIT || limit > MAX_DESTACADAS_LIMIT) {
+    throw createHttpError(
+      `limit debe estar entre ${MIN_DESTACADAS_LIMIT} y ${MAX_DESTACADAS_LIMIT}`
+    );
+  }
+
+  return limit;
 }
 
 function getAdminCategoryFilters(query) {
@@ -176,6 +196,22 @@ export async function obtenerCategoriasAdmin(query) {
       hasPrevPage: pagination.page > 1,
     },
   };
+}
+
+export async function obtenerConfiguracionCategoriasDestacadas() {
+  const limit = await obtenerLimiteCategoriasDestacadasConfig();
+  return { limit };
+}
+
+export async function actualizarConfiguracionCategoriasDestacadas(data) {
+  const limit = parseDestacadasLimit(data.limit ?? data.cantidad);
+  const configuracion = await actualizarLimiteCategoriasDestacadasConfig(limit);
+
+  if (!configuracion) {
+    throw createHttpError("Configuracion de tienda no encontrada", 404);
+  }
+
+  return configuracion;
 }
 
 export async function obtenerCategoriaAdmin(id) {

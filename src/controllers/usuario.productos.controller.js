@@ -1,10 +1,11 @@
 import {
   obtenerFiltrosProductos,
+  obtenerProductoPorSlug,
   obtenerProductos,
-} from "../services/productos.service.js";
+} from "../services/usuario.productos.service.js";
 import { successResponse } from "../utils/response.js";
 
-// ESTE ARCHIVO LO LLAMA src/routes/productos.routes.js.
+// ESTE ARCHIVO LO LLAMA src/routes/usuario.productos.routes.js.
 // AQUI SE RECIBE req.query Y SE ENVIA LA RESPUESTA JSON AL FRONTEND.
 // ESTE PASO TOMA LOS DATOS DE LA URL Y LOS ENVIA AL SERVICE.
 export async function listarProductos(req, res, next) {
@@ -21,6 +22,23 @@ export async function listarProductos(req, res, next) {
 
     // RESPUESTA ESTANDAR: ENVIA DATA Y METADATA DE PAGINACION.
     res.json(successResponse(resultado.data, resultado.pagination));
+  } catch (error) {
+    next(error);
+  }
+}
+
+// DETALLE PUBLICO: RECIBE EL SLUG DE LA URL Y DEVUELVE UN PRODUCTO.
+export async function obtenerProductoPorSlugController(req, res, next) {
+  try {
+    console.log("[productos] Request de detalle:", {
+      method: req.method,
+      path: req.originalUrl,
+      slug: req.params.slug,
+    });
+
+    const producto = await obtenerProductoPorSlug(req.params.slug);
+
+    res.json(successResponse(producto));
   } catch (error) {
     next(error);
   }

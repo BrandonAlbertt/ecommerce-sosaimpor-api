@@ -1,4 +1,4 @@
-// ESTE ARCHIVO LO USA src/services/productos.service.js.
+// ESTE ARCHIVO LO USA src/services/usuario.productos.service.js Y src/services/admin.productos.service.js.
 // CONVIERTE req.query EN TIPOS QUE EL SQL PUEDE ENTENDER.
 export function getProductFilters(query) {
   // LIMPIA ESPACIOS Y DEVUELVE null SI EL TEXTO ESTA VACIO.

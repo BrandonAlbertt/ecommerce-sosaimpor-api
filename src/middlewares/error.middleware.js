@@ -13,8 +13,14 @@ export function errorMiddleware(error, _req, res, _next) {
     code: error.code,
   });
 
-  res.status(statusCode).json({
+  const response = {
     ok: false,
     message: error.message || "Error interno del servidor",
-  });
+  };
+
+  if (statusCode === 429) {
+    response.pagination = null;
+  }
+
+  res.status(statusCode).json(response);
 }
