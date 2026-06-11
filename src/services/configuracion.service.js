@@ -206,6 +206,25 @@ export async function actualizarConfiguracion(id, data) {
   return configuracion;
 }
 
+export async function actualizarEstadoConfiguracion(id, data) {
+  const configId = parseConfigId(id);
+  const sourceData = data && typeof data === "object" ? data : {};
+
+  if (!Object.prototype.hasOwnProperty.call(sourceData, "is_active")) {
+    throw createHttpError("is_active es obligatorio");
+  }
+
+  const configuracion = await actualizarConfiguracionTienda(configId, {
+    is_active: toOptionalBoolean(sourceData.is_active, "is_active"),
+  });
+
+  if (!configuracion) {
+    throw createHttpError("Configuracion no encontrada", 404);
+  }
+
+  return configuracion;
+}
+
 // ELIMINA UNA CONFIGURACION EXISTENTE.
 export async function eliminarConfiguracion(id) {
   const configId = parseConfigId(id);

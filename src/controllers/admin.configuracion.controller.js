@@ -1,5 +1,6 @@
 import {
   actualizarConfiguracion,
+  actualizarEstadoConfiguracion,
   crearConfiguracion,
   eliminarConfiguracion,
   obtenerConfiguracionTienda,
@@ -37,6 +38,22 @@ export async function crearConfiguracionAdminController(req, res, next) {
 export async function actualizarConfiguracionAdminController(req, res, next) {
   try {
     const configuracion = await actualizarConfiguracion(req.params.id, req.body);
+    res.json(successResponse(configuracion));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function actualizarEstadoConfiguracionAdminController(
+  req,
+  res,
+  next
+) {
+  try {
+    const configuracion = await actualizarEstadoConfiguracion(
+      req.params.id,
+      req.body
+    );
     res.json(successResponse(configuracion));
   } catch (error) {
     next(error);

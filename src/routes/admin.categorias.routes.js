@@ -8,7 +8,9 @@ import {
   listarCategoriasAdmin,
   obtenerConfiguracionCategoriasDestacadasController,
   obtenerCategoriaAdminPorIdController,
+  obtenerResumenCategoriasAdminController,
 } from "../controllers/admin.categorias.controller.js";
+import { subirImagenCategoria } from "../middlewares/upload-imagen.middleware.js";
 
 const router = Router();
 
@@ -24,12 +26,14 @@ router.patch(
   "/configuracion/destacadas",
   actualizarConfiguracionCategoriasDestacadasController
 );
+// Devuelve conteos para las tarjetas del panel admin.
+router.get("/resumen", obtenerResumenCategoriasAdminController);
 // Obtiene una categoria admin por su id.
 router.get("/:id", obtenerCategoriaAdminPorIdController);
 // Crea una nueva categoria desde admin.
-router.post("/", crearCategoriaAdminController);
+router.post("/", subirImagenCategoria, crearCategoriaAdminController);
 // Actualiza una categoria existente desde admin.
-router.put("/:id", actualizarCategoriaAdminController);
+router.put("/:id", subirImagenCategoria, actualizarCategoriaAdminController);
 // Desactiva una categoria sin eliminarla fisicamente.
 router.patch("/:id/desactivar", desactivarCategoriaAdminController);
 // Reactiva una categoria desactivada.

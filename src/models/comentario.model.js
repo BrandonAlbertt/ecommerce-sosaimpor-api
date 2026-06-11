@@ -8,16 +8,26 @@ const comentarioSelectFields = `
 
 const comentarioColumns = ["texto", "ip_hash", "user_agent_hash"];
 
-export async function listarComentariosPagina() {
+export async function listarComentariosPagina(pagination) {
+  const countResult = await pool.query(
+    "SELECT COUNT(*)::int AS total FROM comentarios_pagina"
+  );
+
   const result = await pool.query(
     `
       SELECT ${comentarioSelectFields}
       FROM comentarios_pagina
       ORDER BY creado_en DESC, id DESC
-    `
+      LIMIT $1
+      OFFSET $2
+    `,
+    [pagination.limit, pagination.offset]
   );
 
-  return result.rows;
+  return {
+    comentarios: result.rows,
+    total: countResult.rows[0].total,
+  };
 }
 
 export async function obtenerComentarioPaginaPorId(id) {

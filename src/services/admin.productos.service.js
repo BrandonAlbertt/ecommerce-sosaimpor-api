@@ -6,9 +6,11 @@ import {
   categoriaProductoExiste,
   crearProductoAdmin,
   desactivarProductoAdmin,
+  eliminarProductoAdmin,
   listarProductosAdminFiltrados,
   obtenerOpcionesFiltrosProductosAdmin,
   obtenerProductoAdminPorId,
+  obtenerResumenProductosAdmin,
 } from "../models/productos.model.js";
 
 const allowedProductFields = [
@@ -28,6 +30,7 @@ const allowedProductFields = [
   "destacado",
   "orden_destacado",
   "activo",
+  "creado_en",
 ];
 
 function createHttpError(message, statusCode = 400) {
@@ -75,6 +78,18 @@ function toOptionalBoolean(value, fieldName) {
   }
 
   throw createHttpError(`${fieldName} debe ser true o false`);
+}
+
+function toOptionalDate(value, fieldName) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+
+  const dateValue = new Date(value);
+  if (Number.isNaN(dateValue.getTime())) {
+    throw createHttpError(`${fieldName} debe ser una fecha valida`);
+  }
+
+  return dateValue;
 }
 
 function pickProductData(data, { partial = false } = {}) {
@@ -134,6 +149,10 @@ function pickProductData(data, { partial = false } = {}) {
     }
   }
 
+  if (productData.creado_en !== undefined) {
+    productData.creado_en = toOptionalDate(productData.creado_en, "creado_en");
+  }
+
   if (productData.precio !== undefined && productData.precio !== null && productData.precio < 0) {
     throw createHttpError("precio debe ser mayor o igual a 0");
   }
@@ -176,13 +195,46 @@ async function validateCategoriaIfNeeded(productData) {
   }
 }
 
+function getAdminProductSort(query) {
+  const allowedSorts = new Set([
+    "creado_en",
+    "actualizado_en",
+    "nombre",
+    "precio",
+    "stock",
+    "vistas",
+  ]);
+
+  const sortBy = allowedSorts.has(query.sort) ? query.sort : "creado_en";
+  const normalizedOrder =
+    typeof query.order === "string" ? query.order.trim().toLowerCase() : "";
+  const normalizedPrecioOrden =
+    typeof query.precio_orden === "string"
+      ? query.precio_orden.trim().toLowerCase()
+      : "";
+
+  if (normalizedPrecioOrden === "asc" || normalizedPrecioOrden === "desc") {
+    return {
+      sortBy: "precio",
+      sortOrder: normalizedPrecioOrden.toUpperCase(),
+    };
+  }
+
+  return {
+    sortBy,
+    sortOrder: normalizedOrder === "asc" ? "ASC" : "DESC",
+  };
+}
+
 export async function obtenerProductosAdmin(query) {
   const filters = getAdminProductFilters(query);
   const pagination = getPagination(query);
+  const sort = getAdminProductSort(query);
 
   const { productos, total } = await listarProductosAdminFiltrados(
     filters,
-    pagination
+    pagination,
+    sort
   );
   const totalPages = Math.ceil(total / pagination.limit);
 
@@ -197,6 +249,10 @@ export async function obtenerProductosAdmin(query) {
       hasPrevPage: pagination.page > 1,
     },
   };
+}
+
+export async function obtenerResumenAdminProductos() {
+  return obtenerResumenProductosAdmin();
 }
 
 export async function obtenerFiltrosProductosAdmin() {
@@ -254,6 +310,17 @@ export async function desactivarProducto(id) {
 export async function activarProducto(id) {
   const productId = parseProductId(id);
   const producto = await activarProductoAdmin(productId);
+
+  if (!producto) {
+    throw createHttpError("Producto no encontrado", 404);
+  }
+
+  return producto;
+}
+
+export async function eliminarProducto(id) {
+  const productId = parseProductId(id);
+  const producto = await eliminarProductoAdmin(productId);
 
   if (!producto) {
     throw createHttpError("Producto no encontrado", 404);

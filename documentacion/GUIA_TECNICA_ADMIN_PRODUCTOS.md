@@ -64,6 +64,7 @@ router.get("/", listarProductosAdmin);
 router.get("/:id", obtenerProductoAdminPorIdController);
 router.post("/", crearProductoAdminController);
 router.put("/:id", actualizarProductoAdminController);
+router.patch("/:id", actualizarProductoAdminController);
 router.patch("/:id/desactivar", desactivarProductoAdminController);
 router.patch("/:id/activar", activarProductoAdminController);
 ```
@@ -75,6 +76,7 @@ GET    /api/admin/productos
 GET    /api/admin/productos/:id
 POST   /api/admin/productos
 PUT    /api/admin/productos/:id
+PATCH  /api/admin/productos/:id
 PATCH  /api/admin/productos/:id/desactivar
 PATCH  /api/admin/productos/:id/activar
 ```
@@ -310,9 +312,51 @@ proximamente
 destacado
 orden_destacado
 activo
+creado_en
 ```
 
-No se incluyen imagenes en `POST /api/admin/productos` ni en `PUT /api/admin/productos/:id`.
+`actualizado_en` no se envia desde el admin: la API lo actualiza automaticamente con `NOW()` cada vez que se edita un producto.
+
+No se incluyen imagenes en `POST /api/admin/productos`, `PUT /api/admin/productos/:id` ni `PATCH /api/admin/productos/:id`.
+
+JSON completo para crear o editar producto:
+
+```json
+{
+  "categoria_id": 1,
+  "nombre": "Faro delantero Toyota Hilux",
+  "slug": "faro-delantero-toyota-hilux",
+  "descripcion": "Faro delantero compatible con Toyota Hilux.",
+  "tipo_producto": "Faro",
+  "marca": "Toyota",
+  "modelo": "Hilux",
+  "anio": 2024,
+  "codigo_producto": "FAR-HILUX-2024",
+  "condicion": "nuevo",
+  "precio": 250.00,
+  "stock": 8,
+  "proximamente": false,
+  "destacado": true,
+  "orden_destacado": 1,
+  "activo": true,
+  "creado_en": "2026-06-06T10:00:00.000Z"
+}
+```
+
+Para editar parcialmente se puede enviar solo lo que cambia:
+
+```http
+PATCH /api/admin/productos/1
+```
+
+```json
+{
+  "precio": 230.00,
+  "stock": 12,
+  "destacado": false,
+  "activo": true
+}
+```
 
 La imagen principal se lee desde `producto_imagenes` y se devuelve como:
 
@@ -392,6 +436,7 @@ Ruta:
 
 ```http
 PUT /api/admin/productos/:id
+PATCH /api/admin/productos/:id
 ```
 
 El service:
@@ -602,6 +647,7 @@ Mutaciones:
 ```http
 POST /api/admin/productos
 PUT /api/admin/productos/1
+PATCH /api/admin/productos/1
 PATCH /api/admin/productos/1/desactivar
 PATCH /api/admin/productos/1/activar
 ```

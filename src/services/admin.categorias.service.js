@@ -5,10 +5,16 @@ import {
   actualizarLimiteCategoriasDestacadasConfig,
   crearCategoriaAdmin,
   desactivarCategoriaAdmin,
+  eliminarCategoriaAdmin,
   listarCategoriasAdminFiltradas,
   obtenerLimiteCategoriasDestacadasConfig,
   obtenerCategoriaAdminPorId,
+  obtenerResumenCategoriasAdmin,
 } from "../models/categorias.model.js";
+import {
+  eliminarImagenCloudinary,
+  subirImagenCategoriaCloudinary,
+} from "./cloudinary-imagenes.service.js";
 
 const allowedCategoryFields = [
   "nombre",
@@ -198,6 +204,10 @@ export async function obtenerCategoriasAdmin(query) {
   };
 }
 
+export async function obtenerResumenCategorias() {
+  return obtenerResumenCategoriasAdmin();
+}
+
 export async function obtenerConfiguracionCategoriasDestacadas() {
   const limit = await obtenerLimiteCategoriasDestacadasConfig();
   return { limit };
@@ -225,12 +235,37 @@ export async function obtenerCategoriaAdmin(id) {
   return categoria;
 }
 
-export async function crearCategoria(data) {
-  const categoryData = pickCategoryData(data);
-  return crearCategoriaAdmin(categoryData);
+async function limpiarImagenCloudinary(publicId) {
+  try {
+    await eliminarImagenCloudinary(publicId);
+  } catch (error) {
+    console.error("[cloudinary] No se pudo limpiar imagen de categoria:", {
+      publicId,
+      message: error.message,
+    });
+  }
 }
 
-export async function actualizarCategoria(id, data) {
+export async function crearCategoria(data, file) {
+  const categoryData = pickCategoryData(data);
+
+  if (!file) {
+    return crearCategoriaAdmin(categoryData);
+  }
+
+  const uploadData = await subirImagenCategoriaCloudinary(file);
+  categoryData.imagen_url = uploadData.imagen_url;
+  categoryData.imagen_public_id = uploadData.public_id;
+
+  try {
+    return await crearCategoriaAdmin(categoryData);
+  } catch (error) {
+    await limpiarImagenCloudinary(uploadData.public_id);
+    throw error;
+  }
+}
+
+export async function actualizarCategoria(id, data, file) {
   const categoriaId = parseCategoriaId(id);
   const currentCategory = await obtenerCategoriaAdminPorId(categoriaId);
 
@@ -239,10 +274,36 @@ export async function actualizarCategoria(id, data) {
   }
 
   const categoryData = pickCategoryData(data, { partial: true });
-  const updatedCategory = await actualizarCategoriaAdmin(categoriaId, categoryData);
+  let uploadData = null;
+
+  if (file) {
+    uploadData = await subirImagenCategoriaCloudinary(file);
+    categoryData.imagen_url = uploadData.imagen_url;
+    categoryData.imagen_public_id = uploadData.public_id;
+  }
+
+  let updatedCategory;
+
+  try {
+    updatedCategory = await actualizarCategoriaAdmin(categoriaId, categoryData);
+  } catch (error) {
+    if (uploadData) {
+      await limpiarImagenCloudinary(uploadData.public_id);
+    }
+
+    throw error;
+  }
 
   if (!updatedCategory) {
+    if (uploadData) {
+      await limpiarImagenCloudinary(uploadData.public_id);
+    }
+
     throw createHttpError("Categoria no encontrada", 404);
+  }
+
+  if (uploadData && currentCategory.imagen_public_id) {
+    await limpiarImagenCloudinary(currentCategory.imagen_public_id);
   }
 
   return updatedCategory;
@@ -268,4 +329,22 @@ export async function activarCategoria(id) {
   }
 
   return categoria;
+}
+
+export async function eliminarCategoria(id) {
+  const categoriaId = parseCategoriaId(id);
+  const resultado = await eliminarCategoriaAdmin(categoriaId);
+
+  if (!resultado) {
+    throw createHttpError("Categoria no encontrada", 404);
+  }
+
+  for (const publicId of resultado.publicIds) {
+    await limpiarImagenCloudinary(publicId);
+  }
+
+  return {
+    ...resultado.categoria,
+    productos_eliminados: resultado.productosEliminados,
+  };
 }

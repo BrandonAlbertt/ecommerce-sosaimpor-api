@@ -1,18 +1,81 @@
-# Guia de comentarios de pagina
+# Guia comentarios de pagina con graficos
 
-Esta guia explica el modulo de comentarios que guarda mensajes enviados por usuarios desde la pagina.
+Objetivo: entender rapido como funciona el modulo de comentarios, que rutas existen, que archivos toca, que funciones se usan, que seguridad anti-spam tiene y como modificar sus tiempos.
 
-Tabla usada:
+> Nota: en `src/app.js` la ruta admin tiene TODO de proteger con `authMiddleware` y rol admin.
+
+## Mapa rapido
+
+```mermaid
+flowchart LR
+  A[Usuario pagina] --> B[POST /api/comentarios]
+  B --> C[Controller]
+  C --> D[Service]
+  D --> E[Hash IP/User-Agent]
+  D --> F[Validar limites]
+  F --> G[Model SQL]
+  G --> H[(comentarios_pagina)]
+  H --> I[JSON gracias]
+```
+
+Idea central:
+
+| Actor | Puede hacer |
+|---|---|
+| Usuario publico | Crear comentario |
+| Admin | Listar, ver, editar, eliminar y vaciar |
+| Backend | Ocultar IP real, generar hashes y limitar spam |
+
+## Rutas
+
+Publico:
+
+| Metodo | Endpoint | Para que sirve | Controller |
+|---|---|---|---|
+| POST | `/api/comentarios` | Crear comentario desde la pagina | `crearComentarioUsuarioController` |
+
+Admin:
+
+| Metodo | Endpoint | Para que sirve | Controller |
+|---|---|---|---|
+| GET | `/api/admin/comentarios` | Listar comentarios | `listarComentariosAdminController` |
+| GET | `/api/admin/comentarios/:id` | Ver comentario por id | `obtenerComentarioAdminPorIdController` |
+| PUT | `/api/admin/comentarios/:id` | Editar comentario | `actualizarComentarioAdminController` |
+| PATCH | `/api/admin/comentarios/:id` | Editar comentario parcial | `actualizarComentarioAdminController` |
+| DELETE | `/api/admin/comentarios/:id` | Eliminar un comentario | `eliminarComentarioAdminController` |
+| DELETE | `/api/admin/comentarios/vaciar` | Vaciar tabla completa | `vaciarComentariosAdminController` |
+
+## Archivos y funciones
+
+| Capa | Archivo | Funciones |
+|---|---|---|
+| Montaje | `src/app.js` | `app.use("/api/comentarios", comentariosRoutes)`, `app.use("/api/admin/comentarios", adminComentariosRoutes)` |
+| Route publico | `src/routes/usuario.comentarios.routes.js` | `router.post("/")` |
+| Route admin | `src/routes/admin.comentarios.routes.js` | `router.get("/")`, `router.delete("/vaciar")`, `router.get("/:id")`, `router.put("/:id")`, `router.patch("/:id")`, `router.delete("/:id")` |
+| Controller publico | `src/controllers/usuario.comentarios.controller.js` | `crearComentarioUsuarioController` |
+| Controller admin | `src/controllers/admin.comentarios.controller.js` | `listarComentariosAdminController`, `obtenerComentarioAdminPorIdController`, `actualizarComentarioAdminController`, `eliminarComentarioAdminController`, `vaciarComentariosAdminController` |
+| Service | `src/services/comentario.service.js` | `obtenerIpRealComentario`, `obtenerUserAgentComentario`, `crearComentario`, `obtenerComentariosAdmin`, `obtenerComentarioAdmin`, `actualizarComentarioAdmin`, `eliminarComentarioAdmin`, `vaciarComentariosAdmin` |
+| Model | `src/models/comentario.model.js` | `listarComentariosPagina`, `obtenerComentarioPaginaPorId`, `crearComentarioPagina`, `contarComentariosRecientesPorIpHash`, `actualizarComentarioPagina`, `eliminarComentarioPagina`, `vaciarComentariosPagina` |
+| Configuracion | `src/models/configuracion.model.js` | `obtenerConfiguracionTiendaActivaCompleta` |
+| Respuesta | `src/utils/response.js` | `successResponse` |
+| Errores | `src/middlewares/error.middleware.js` | `errorMiddleware` |
+| Entorno | `.env` | `COMMENT_HASH_SECRET` |
+
+## Tabla `comentarios_pagina`
 
 ```sql
 CREATE TABLE comentarios_pagina (
-    id SERIAL PRIMARY KEY,
-    texto TEXT NOT NULL,
-    ip_hash VARCHAR(128) NOT NULL,
-    user_agent_hash VARCHAR(128),
-    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  texto TEXT NOT NULL,
+  ip_hash VARCHAR(128) NOT NULL,
+  user_agent_hash VARCHAR(128),
+  creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+```
 
+Indices recomendados:
+
+```sql
 CREATE INDEX idx_comentarios_pagina_ip_hash_creado_en
 ON comentarios_pagina (ip_hash, creado_en);
 
@@ -20,27 +83,70 @@ CREATE INDEX idx_comentarios_pagina_creado_en
 ON comentarios_pagina (creado_en);
 ```
 
-## Que hace
+Campos visibles en respuestas:
 
-```txt
-usuario solo puede crear comentarios
-admin puede listar, ver por id, editar, eliminar y vaciar la tabla
-el backend limita envios repetidos usando hashes seguros
+| Campo | Publico/Admin |
+|---|---|
+| `id` | Si |
+| `texto` | Si |
+| `creado_en` | Si |
+| `ip_hash` | No |
+| `user_agent_hash` | No |
+
+## Seguridad implementada
+
+```mermaid
+mindmap
+  root((Seguridad comentarios))
+    Privacidad
+      no guarda IP real
+      usa HMAC SHA-256
+      hashes no salen en JSON
+    Anti-spam
+      1 comentario por intervalo
+      limite diario por IP hash
+      error 429 si excede
+    Configuracion
+      COMMENT_HASH_SECRET
+      comment_min_interval_minutes
+      comment_daily_limit
+    Validacion
+      texto obligatorio
+      id positivo
 ```
-
-## Seguridad anti-spam
 
 El usuario solo envia:
 
 ```json
 {
-  "texto": "Mi mensaje"
+  "texto": "Quiero consultar por un repuesto"
 }
 ```
 
-No se recibe `ip_hash` ni `user_agent_hash` desde el body.
+El backend calcula:
 
-El backend obtiene la IP real desde el request usando este orden:
+| Dato | De donde sale |
+|---|---|
+| IP real | headers/request |
+| User-Agent | header `user-agent` |
+| `ip_hash` | HMAC-SHA-256 con `COMMENT_HASH_SECRET` |
+| `user_agent_hash` | HMAC-SHA-256 con `COMMENT_HASH_SECRET` |
+
+Orden para obtener IP:
+
+```mermaid
+flowchart TD
+  A[Request] --> B[cf-connecting-ip]
+  B --> C{x-real-ip existe?}
+  C --> D[x-real-ip]
+  D --> E{x-forwarded-for existe?}
+  E --> F[x-forwarded-for]
+  F --> G[req.ip]
+  G --> H[req.socket.remoteAddress]
+  H --> I[normalizeIp]
+```
+
+En codigo, el orden real es:
 
 ```txt
 cf-connecting-ip
@@ -50,37 +156,146 @@ req.ip
 req.socket.remoteAddress
 ```
 
-Luego genera:
+## Variable secreta
 
-```txt
-ip_hash = HMAC-SHA-256(IP real + COMMENT_HASH_SECRET)
-user_agent_hash = HMAC-SHA-256(User-Agent + COMMENT_HASH_SECRET)
-```
-
-Importante:
-
-```txt
-no se guarda la IP real
-no se exponen hashes en la respuesta
-los listados admin tampoco devuelven hashes
-```
-
-Variable requerida en `.env`:
+Requerida en `.env`:
 
 ```env
 COMMENT_HASH_SECRET=un_texto_largo_secreto_y_dificil_de_adivinar
 ```
 
-Limites actuales por `ip_hash`:
+Si falta:
 
-```txt
-maximo 1 comentario cada 5 minutos
-maximo 3 comentarios cada 24 horas
+```json
+{
+  "ok": false,
+  "message": "Configuracion de comentarios incompleta"
+}
 ```
 
-## Rutas usuario
+Regla importante:
 
-### Crear comentario
+| Accion | Efecto |
+|---|---|
+| Mantener `COMMENT_HASH_SECRET` | Mantiene continuidad del limite por IP |
+| Cambiar `COMMENT_HASH_SECRET` | Los hashes nuevos ya no coinciden con los anteriores |
+| Borrar `COMMENT_HASH_SECRET` | No se pueden crear comentarios |
+
+## Tiempos anti-spam
+
+Valores actuales por defecto:
+
+| Limite | Campo config | Default |
+|---|---|---|
+| Minutos entre comentarios | `comment_min_interval_minutes` | `5` |
+| Maximo en 24 horas | `comment_daily_limit` | `3` |
+
+Flujo:
+
+```mermaid
+flowchart TD
+  A[crearComentario] --> B[hashValue IP]
+  B --> C[obtenerConfiguracionLimitesComentario]
+  C --> D[obtenerConfiguracionTiendaActivaCompleta]
+  D --> E{hay valores validos?}
+  E -->|Si| F[usar comment_min_interval_minutes y comment_daily_limit]
+  E -->|No| G[usar defaults 5 y 3]
+  F --> H[contarComentariosRecientesPorIpHash]
+  G --> H
+  H --> I{excede limites?}
+  I -->|Si| J[Error 429]
+  I -->|No| K[crearComentarioPagina]
+```
+
+SQL de conteo:
+
+```sql
+SELECT
+  COUNT(*) FILTER (
+    WHERE creado_en >= NOW() - ($2 * INTERVAL '1 minute')
+  )::int AS ultimos_intervalo,
+  COUNT(*) FILTER (
+    WHERE creado_en >= NOW() - INTERVAL '24 hours'
+  )::int AS ultimas_24_horas
+FROM comentarios_pagina
+WHERE ip_hash = $1;
+```
+
+Regla:
+
+| Condicion | Resultado |
+|---|---|
+| `ultimosIntervalo >= 1` | Bloquea |
+| `ultimas24Horas >= dailyLimit` | Bloquea |
+| Ninguna se cumple | Guarda comentario |
+
+Mensaje al bloquear:
+
+```json
+{
+  "ok": false,
+  "message": "Ya recibimos tu sugerencia. Podras enviar otra mas adelante.",
+  "pagination": null
+}
+```
+
+## Como modificar los tiempos
+
+Los tiempos se cambian en la configuracion activa de tienda, no en el frontend.
+
+Campos:
+
+| Campo | Que controla | Tipo |
+|---|---|---|
+| `comment_min_interval_minutes` | Minutos minimos entre comentarios de la misma IP hash | entero positivo |
+| `comment_daily_limit` | Cantidad maxima por IP hash en 24 horas | entero positivo |
+
+Ruta admin para editar configuracion:
+
+```http
+PATCH /api/admin/configuracion/:id
+```
+
+Ejemplo: permitir 1 comentario cada 10 minutos y maximo 5 al dia.
+
+```http
+PATCH /api/admin/configuracion/1
+Content-Type: application/json
+```
+
+```json
+{
+  "comment_min_interval_minutes": 10,
+  "comment_daily_limit": 5
+}
+```
+
+Flujo de modificacion:
+
+```mermaid
+flowchart TD
+  A[PATCH /api/admin/configuracion/:id] --> B[admin.configuracion.controller.js]
+  B --> C[actualizarConfiguracion]
+  C --> D[pickConfiguracionTiendaData]
+  D --> E[toOptionalPositiveInteger]
+  E --> F[actualizarConfiguracionTienda]
+  F --> G[(home_config)]
+  G --> H[comentarios usan nuevo tiempo]
+```
+
+Donde se valida:
+
+| Archivo | Funcion |
+|---|---|
+| `src/services/configuracion.service.js` | `pickConfiguracionTiendaData` |
+| `src/services/configuracion.service.js` | `toOptionalPositiveInteger` |
+| `src/services/comentario.service.js` | `obtenerConfiguracionLimitesComentario` |
+
+Si se envia `0`, negativo, decimal o texto no numerico, se rechaza porque debe ser entero positivo.
+
+## Crear comentario publico
+
+Ruta:
 
 ```http
 POST /api/comentarios
@@ -92,6 +307,24 @@ Body:
 {
   "texto": "Quiero consultar por un repuesto"
 }
+```
+
+Flujo:
+
+```mermaid
+flowchart TD
+  A[POST /api/comentarios] --> B[usuario.comentarios.routes.js]
+  B --> C[crearComentarioUsuarioController]
+  C --> D[obtenerIpRealComentario]
+  C --> E[obtenerUserAgentComentario]
+  D --> F[crearComentario]
+  E --> F
+  F --> G[pickComentarioData]
+  G --> H[hashValue IP y User-Agent]
+  H --> I[validarLimitesComentario]
+  I --> J[crearComentarioPagina]
+  J --> K[(INSERT comentarios_pagina)]
+  K --> L[201 + mensaje de gracias]
 ```
 
 Respuesta:
@@ -111,333 +344,130 @@ Respuesta:
 }
 ```
 
-El usuario no tiene rutas para listar, editar, eliminar ni buscar por id.
+## Admin comentarios
 
-Si supera el limite anti-spam:
+Mapa:
 
-```json
-{
-  "ok": false,
-  "message": "Ya recibimos tu sugerencia. Podrás enviar otra más adelante.",
-  "pagination": null
-}
+```mermaid
+flowchart TD
+  A[Panel admin] --> B{Accion}
+  B --> C[Listar]
+  B --> D[Ver]
+  B --> E[Editar]
+  B --> F[Eliminar]
+  B --> G[Vaciar]
+  C --> H[comentario.service.js]
+  D --> H
+  E --> H
+  F --> H
+  G --> H
+  H --> I[comentario.model.js]
+  I --> J[(comentarios_pagina)]
 ```
 
-## Rutas admin
+Funciones por accion:
 
-Base:
+| Accion | Service | Model |
+|---|---|---|
+| Listar | `obtenerComentariosAdmin` | `listarComentariosPagina` |
+| Ver | `obtenerComentarioAdmin` | `obtenerComentarioPaginaPorId` |
+| Editar | `actualizarComentarioAdmin` | `actualizarComentarioPagina` |
+| Eliminar | `eliminarComentarioAdmin` | `eliminarComentarioPagina` |
+| Vaciar | `vaciarComentariosAdmin` | `vaciarComentariosPagina` |
 
-```http
-/api/admin/comentarios
+## SQL principal
+
+Listar:
+
+```sql
+SELECT id, texto, creado_en
+FROM comentarios_pagina
+ORDER BY creado_en DESC, id DESC;
 ```
 
-### Listar comentarios
+Ver:
 
-```http
-GET /api/admin/comentarios
+```sql
+SELECT id, texto, creado_en
+FROM comentarios_pagina
+WHERE id = $1
+LIMIT 1;
 ```
 
-Respuesta:
+Crear:
 
-```json
-{
-  "ok": true,
-  "data": [
-    {
-      "id": 2,
-      "texto": "Necesito informacion de un motor",
-      "creado_en": "2026-05-29T23:35:00.000Z"
-    },
-    {
-      "id": 1,
-      "texto": "Quiero consultar por un repuesto",
-      "creado_en": "2026-05-29T23:30:00.000Z"
-    }
-  ],
-  "pagination": null
-}
+```sql
+INSERT INTO comentarios_pagina (texto, ip_hash, user_agent_hash)
+VALUES ($1, $2, $3)
+RETURNING id;
 ```
 
-Orden:
+Editar:
 
-```txt
-creado_en DESC, id DESC
+```sql
+UPDATE comentarios_pagina
+SET texto = $1
+WHERE id = $2
+RETURNING id;
 ```
 
-### Obtener comentario por id
+Eliminar:
 
-```http
-GET /api/admin/comentarios/:id
+```sql
+DELETE FROM comentarios_pagina
+WHERE id = $1
+RETURNING id, texto, creado_en;
 ```
 
-Ejemplo:
-
-```http
-GET /api/admin/comentarios/1
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "id": 1,
-    "texto": "Quiero consultar por un repuesto",
-    "creado_en": "2026-05-29T23:30:00.000Z"
-  },
-  "pagination": null
-}
-```
-
-### Editar comentario
-
-```http
-PUT /api/admin/comentarios/:id
-PATCH /api/admin/comentarios/:id
-```
-
-Body:
-
-```json
-{
-  "texto": "Comentario corregido desde admin"
-}
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "id": 1,
-    "texto": "Comentario corregido desde admin",
-    "creado_en": "2026-05-29T23:30:00.000Z"
-  },
-  "pagination": null
-}
-```
-
-### Eliminar comentario
-
-```http
-DELETE /api/admin/comentarios/:id
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "id": 1,
-    "texto": "Comentario corregido desde admin",
-    "creado_en": "2026-05-29T23:30:00.000Z"
-  },
-  "pagination": null
-}
-```
-
-### Vaciar tabla
-
-```http
-DELETE /api/admin/comentarios/vaciar
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "data": {
-    "eliminados": 10
-  },
-  "pagination": null
-}
-```
-
-Esta ruta ejecuta:
+Vaciar:
 
 ```sql
 TRUNCATE TABLE comentarios_pagina RESTART IDENTITY;
 ```
 
-Eso elimina todos los comentarios y reinicia el contador `id`.
-
-## Archivos usados
-
-| Archivo | Funcion |
-| --- | --- |
-| `src/app.js` | Monta `/api/comentarios` y `/api/admin/comentarios` |
-| `src/routes/usuario.comentarios.routes.js` | Define `POST /api/comentarios` |
-| `src/controllers/usuario.comentarios.controller.js` | Crea comentario y responde mensaje de gracias |
-| `src/routes/admin.comentarios.routes.js` | Define rutas admin de comentarios |
-| `src/controllers/admin.comentarios.controller.js` | Recibe peticiones admin y responde JSON |
-| `src/services/comentario.service.js` | Valida `id`, valida `texto`, obtiene IP/User-Agent, genera hashes y valida limites |
-| `src/models/comentario.model.js` | Ejecuta SQL sobre `comentarios_pagina`, cuenta comentarios recientes y guarda hashes |
-| `src/config/db.js` | Exporta el pool PostgreSQL |
-| `src/utils/response.js` | Da formato `{ ok, data, pagination }` |
-| `src/middlewares/error.middleware.js` | Devuelve errores, incluyendo `429` con `pagination: null` |
-| `.env` | Define `COMMENT_HASH_SECRET` para generar hashes |
-
-## Diagrama usuario
-
-```mermaid
-flowchart TD
-  A[Usuario en frontend] --> B[POST /api/comentarios]
-  B --> C[usuario.comentarios.routes.js]
-  C --> D[usuario.comentarios.controller.js]
-  D --> E[Obtiene IP y User-Agent del request]
-  E --> F[comentario.service.js]
-  F --> G[Genera ip_hash y user_agent_hash]
-  G --> H[Valida limites por ip_hash]
-  H --> I[comentario.model.js]
-  I --> J[(PostgreSQL comentarios_pagina)]
-  J --> I
-  I --> F
-  F --> D
-  D --> K[JSON con mensaje de gracias]
-```
-
-## Diagrama admin
-
-```mermaid
-flowchart TD
-  A[Panel admin] --> B{Ruta admin}
-  B --> C[GET /api/admin/comentarios]
-  B --> D[GET /api/admin/comentarios/:id]
-  B --> E[PUT/PATCH /api/admin/comentarios/:id]
-  B --> F[DELETE /api/admin/comentarios/:id]
-  B --> G[DELETE /api/admin/comentarios/vaciar]
-
-  C --> H[admin.comentarios.routes.js]
-  D --> H
-  E --> H
-  F --> H
-  G --> H
-
-  H --> I[admin.comentarios.controller.js]
-  I --> J[comentario.service.js]
-  J --> K[comentario.model.js]
-  K --> L[(PostgreSQL comentarios_pagina)]
-  L --> K
-  K --> J
-  J --> I
-  I --> M[JSON para admin]
-```
-
-## Flujo por capas
-
-Crear comentario usuario:
-
-```txt
-POST /api/comentarios
-  -> usuario.comentarios.routes.js
-  -> crearComentarioUsuarioController()
-  -> obtiene IP real y User-Agent desde req
-  -> crearComentario(body, requestInfo)
-  -> genera ip_hash y user_agent_hash con COMMENT_HASH_SECRET
-  -> contarComentariosRecientesPorIpHash(ip_hash)
-  -> valida 1 comentario cada 5 minutos y 3 cada 24 horas
-  -> crearComentarioPagina()
-  -> INSERT INTO comentarios_pagina (texto, ip_hash, user_agent_hash)
-```
-
-Listar admin:
-
-```txt
-GET /api/admin/comentarios
-  -> admin.comentarios.routes.js
-  -> listarComentariosAdminController()
-  -> obtenerComentariosAdmin()
-  -> listarComentariosPagina()
-  -> SELECT id, texto, creado_en FROM comentarios_pagina
-```
-
-Editar admin:
-
-```txt
-PATCH /api/admin/comentarios/:id
-  -> actualizarComentarioAdminController()
-  -> actualizarComentarioAdmin(id, body)
-  -> actualizarComentarioPagina(id, data)
-  -> UPDATE comentarios_pagina SET texto = $1 WHERE id = $2
-```
-
-Eliminar admin:
-
-```txt
-DELETE /api/admin/comentarios/:id
-  -> eliminarComentarioAdminController()
-  -> eliminarComentarioAdmin(id)
-  -> eliminarComentarioPagina(id)
-  -> DELETE FROM comentarios_pagina WHERE id = $1
-```
-
-Vaciar admin:
-
-```txt
-DELETE /api/admin/comentarios/vaciar
-  -> vaciarComentariosAdminController()
-  -> vaciarComentariosAdmin()
-  -> vaciarComentariosPagina()
-  -> TRUNCATE TABLE comentarios_pagina RESTART IDENTITY
-```
-
 ## Errores comunes
 
-Texto vacio:
-
-```json
-{
-  "ok": false,
-  "message": "texto es obligatorio"
-}
-```
-
-Limite anti-spam:
-
-```json
-{
-  "ok": false,
-  "message": "Ya recibimos tu sugerencia. Podrás enviar otra más adelante.",
-  "pagination": null
-}
-```
-
-Falta `COMMENT_HASH_SECRET`:
-
-```json
-{
-  "ok": false,
-  "message": "Configuracion de comentarios incompleta"
-}
-```
-
-Id invalido:
-
-```json
-{
-  "ok": false,
-  "message": "id de comentario invalido"
-}
-```
-
-Comentario no encontrado:
-
-```json
-{
-  "ok": false,
-  "message": "Comentario no encontrado"
-}
-```
+| Error | Causa | Solucion |
+|---|---|---|
+| `texto es obligatorio` | Body sin `texto` o vacio | Enviar texto con contenido |
+| `Ya recibimos tu sugerencia...` | Anti-spam activo | Esperar o cambiar tiempos en configuracion |
+| `Configuracion de comentarios incompleta` | Falta `COMMENT_HASH_SECRET` | Agregar variable en `.env` |
+| `id de comentario invalido` | `id` no es entero positivo | Usar id valido |
+| `Comentario no encontrado` | El id no existe | Revisar listado admin |
 
 ## Pendientes recomendados
 
-```txt
-proteger rutas /api/admin/comentarios con auth y rol admin
-agregar limite de longitud para texto si el frontend lo requiere
-agregar paginacion al listado admin si llegan muchos comentarios
-rotar COMMENT_HASH_SECRET solo si aceptas perder continuidad del limite por IP
+| Pendiente | Motivo |
+|---|---|
+| Proteger `/api/admin/comentarios` | Evitar acceso publico al panel admin |
+| Agregar paginacion admin | Si llegan muchos comentarios |
+| Agregar limite de longitud de `texto` | Evitar textos enormes |
+| Rotar `COMMENT_HASH_SECRET` con cuidado | Cambia continuidad de limites por IP |
+
+## Como leer el codigo sin perderse
+
+```mermaid
+flowchart TD
+  A[Quiero entender comentarios] --> B[src/app.js]
+  B --> C[src/routes/usuario.comentarios.routes.js]
+  B --> D[src/routes/admin.comentarios.routes.js]
+  C --> E[src/controllers/usuario.comentarios.controller.js]
+  D --> F[src/controllers/admin.comentarios.controller.js]
+  E --> G[src/services/comentario.service.js]
+  F --> G
+  G --> H[src/models/comentario.model.js]
+  G --> I[src/models/configuracion.model.js]
+  H --> J[src/config/db.js]
 ```
+
+Regla simple:
+
+| Si quieres ver... | Abre... |
+|---|---|
+| URLs publicas | `src/routes/usuario.comentarios.routes.js` |
+| URLs admin | `src/routes/admin.comentarios.routes.js` |
+| Respuesta al usuario | `src/controllers/usuario.comentarios.controller.js` |
+| Seguridad, hashes y limites | `src/services/comentario.service.js` |
+| SQL real | `src/models/comentario.model.js` |
+| Cambiar tiempos | `src/services/configuracion.service.js` y `/api/admin/configuracion/:id` |
+

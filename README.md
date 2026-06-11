@@ -1,325 +1,126 @@
-# Ecommerce Sosaimpor API
+# 🛍️ Ecommerce Sosaimpor API
 
-API backend para el ecommerce de Sosaimpor.
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express" />
+  <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Cloudinary-3448C5?style=for-the-badge&logo=cloudinary&logoColor=white" alt="Cloudinary" />
+  <img src="https://img.shields.io/badge/pnpm-F69220?style=for-the-badge&logo=pnpm&logoColor=white" alt="pnpm" />
+</p>
 
-Este servicio expone rutas publicas para consultar productos y rutas admin para administrar productos, categorias, especificaciones e imagenes de producto.
+API REST moderna, estructurada y de alto rendimiento diseñada para dar soporte al e-commerce de **Sosaimpor**. Este backend proporciona todos los endpoints necesarios tanto para la tienda pública como para el panel de administración de productos, categorías, especificaciones técnicas e imágenes asociadas.
 
-Stack principal:
+---
 
-```txt
-Node.js
-Express
-PostgreSQL
-Cloudinary para imagenes
-pnpm como package manager
-```
+## ✨ Características Principales
 
-## Indice de documentacion
+* 🛒 **API Pública**:
+  * Búsqueda inteligente de productos, paginación dinámica y filtros avanzados (por categoría, marca, modelo, rango de precios, etc.).
+  * Endpoints optimizados para consultas rápidas de categorías destacadas.
+* ⚡ **Sistema de Caché Inteligente (In-Memory)**:
+  * Implementación nativa de caché mediante `Map` en [cache.js](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/src/utils/cache.js).
+  * Auto-invalidación al detectar cambios exitosos en la base de datos a través de [cache-invalidator.middleware.js](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/src/middlewares/cache-invalidator.middleware.js).
+  * Expiración (TTL) diferenciada: Listado de productos (5 min), Detalle por Slug (10 min), Categorías y Filtros (15 min).
+* 🛠️ **Panel de Administración (`/api/admin`)**:
+  * Gestión completa (CRUD) de productos, categorías y especificaciones técnicas.
+  * Carga directa e inteligente de imágenes conectada con **Cloudinary** (con guardado automático de `public_id` para permitir la eliminación física y evitar imágenes huérfanas en la nube).
+  * Protegido por una clave de seguridad a nivel de middleware.
 
-La carpeta `documentacion` contiene guias por modulo y guias tecnicas para entender como viajan los datos dentro de la API.
+---
 
-| Archivo | Que explica |
-| --- | --- |
-| `documentacion/ADMIN_PRODUCTOS_RUTAS_Y_FILTROS.md` | Como consumir rutas admin de productos, filtros, payloads y respuestas del panel admin |
-| `documentacion/ESTADO_ACTUAL_API_PRODUCTOS_Y_ADMIN.md` | Mapa rapido del estado de productos, categorias y modulos admin; sirve como panorama general y puede quedar atras respecto a cambios recientes |
-| `documentacion/FILTRACION_Y_PAGINACION_PRODUCTOS.md` | Rutas publicas de productos, query params, paginacion, busqueda y opciones para filtros |
-| `documentacion/GUIA_ADMIN_PRODUCTO_ESPECIFICACIONES.md` | CRUD admin de especificaciones de producto, rutas, payloads y flujo `route -> controller -> service -> model -> PostgreSQL` |
-| `documentacion/GUIA_COMPLETA_ADMIN_CATEGORIAS.md` | Guia completa de categorias admin, tabla, rutas, validaciones y viaje de datos |
-| `documentacion/GUIA_COMPLETA_ADMIN_PRODUCTO_IMAGENES_Y_CLOUDINARY.md` | Subida de imagenes con Cloudinary, configuracion, rutas admin, Postman, reemplazo, orden, principal y borrado |
-| `documentacion/GUIA_TECNICA_ADMIN_PRODUCTOS.md` | Implementacion tecnica de productos admin sin romper la API publica |
-| `documentacion/GUIA_TECNICA_FILTRACION_Y_PAGINACION_PRODUCTOS.md` | Implementacion tecnica de filtros y paginacion de productos por capas |
+## 📁 Estructura del Proyecto
 
-Lectura recomendada para empezar:
-
-```txt
-1. README.md
-2. documentacion/ESTADO_ACTUAL_API_PRODUCTOS_Y_ADMIN.md
-3. documentacion/FILTRACION_Y_PAGINACION_PRODUCTOS.md
-4. la guia admin del modulo que vayas a tocar
-```
-
-## Que hace este servicio
-
-La API separa funcionalidades publicas y administrativas.
-
-### Publico
-
-Actualmente sirve datos para el frontend de usuario:
+El proyecto sigue una arquitectura limpia basada en capas de responsabilidades:
 
 ```txt
-listar productos
-buscar productos
-filtrar por categoria, marca, modelo, precios y otros campos
-paginar resultados
-obtener opciones de filtros
-leer configuracion expuesta por su ruta
+ecommerce-sosaimpor-api/
+├── documentacion/       # Guías de desarrollo, estructura de la DB y endpoints
+├── node_modules/        # Dependencias instaladas
+├── src/                 # Código fuente principal
+│   ├── config/          # Conexión a Base de Datos y Cloudinary
+│   ├── controllers/     # Controladores HTTP (manejan req, res y errores)
+│   ├── middlewares/     # Validación de seguridad, errores y archivos (Multer)
+│   ├── models/          # Consultas SQL nativas e interacción con PostgreSQL
+│   ├── routes/          # Definición de rutas públicas y administrativas
+│   ├── scripts/         # Herramientas auxiliares (test de conexión a la DB)
+│   ├── services/        # Lógica de negocio principal y validaciones
+│   ├── utils/           # Ayudantes (formateador de respuestas, paginación, filtros y caché)
+│   ├── app.js           # Inicialización y configuración de Express
+│   └── server.js        # Punto de entrada de la aplicación
+├── .env.example         # Plantilla de variables de entorno
+├── GEMINI.md            # Reglas esenciales de arquitectura y estilo de código
+├── package.json         # Scripts de inicio y dependencias declaradas
+└── pnpm-lock.yaml       # Registro estricto de versiones de dependencias
 ```
 
-Regla publica importante:
-
+La información fluye de la siguiente manera:
 ```txt
-los listados publicos de productos muestran productos activos
-y productos cuya categoria esta activa
+Cliente ──> [Routes] ──> [Controllers] ──> [Services] (Caché) ──> [Models] ──> [PostgreSQL]
 ```
 
-### Admin
+---
 
-Actualmente tiene modulos para:
+## 🚀 Guía de Instalación Rápida (Tras Git Clone)
 
-```txt
-productos admin
-categorias admin
-especificaciones de producto
-imagenes de producto
-```
+Sigue estos sencillos pasos para levantar el servidor en tu máquina local:
 
-Las rutas admin permiten administrar datos que no deben depender del frontend publico.
-
-Importante:
-
-```txt
-las rutas admin todavia tienen comentarios TODO para protegerse con authMiddleware y rol admin
-```
-
-Antes de exponer esta API en produccion, agrega autenticacion y autorizacion para las rutas `/api/admin/...`.
-
-## Rutas base
-
-Rutas publicas principales:
-
-```http
-GET /health
-GET /api/productos
-GET /api/productos/filtros-opciones
-GET /api/categorias
-GET /api/configuracion
-```
-
-Rutas admin principales:
-
-```http
-/api/admin/productos
-/api/admin/categorias
-/api/admin/productos/:productoId/especificaciones
-/api/admin/productos/:productoId/imagenes
-```
-
-Para rutas, bodies y ejemplos completos revisa las guias de `documentacion`.
-
-## Arquitectura
-
-La API sigue esta separacion por capas:
-
-```txt
-routes -> controllers -> services -> models -> PostgreSQL
-```
-
-Para imagenes se agrega Cloudinary:
-
-```txt
-admin -> route -> multer -> controller -> service admin
-      -> service Cloudinary -> Cloudinary
-      -> model -> PostgreSQL
-```
-
-Carpetas principales:
-
-| Ruta | Uso |
-| --- | --- |
-| `src/routes` | Define URLs y metodos HTTP |
-| `src/controllers` | Recibe `req`, llama services y responde JSON |
-| `src/services` | Valida datos y coordina reglas de negocio |
-| `src/models` | Ejecuta SQL con PostgreSQL |
-| `src/config` | Configuracion de DB y Cloudinary |
-| `src/middlewares` | Manejo de errores y recepcion de imagenes |
-| `src/utils` | Filtros, paginacion y formato de respuestas |
-| `src/scripts` | Scripts auxiliares, por ejemplo prueba de DB |
-
-## Librerias usadas
-
-Dependencias actuales:
-
-| Libreria | Para que se usa |
-| --- | --- |
-| `express` | Servidor HTTP y routers |
-| `cors` | Permitir consumo desde frontend en otro origen |
-| `dotenv` | Cargar variables desde `.env` |
-| `pg` | Conexion y consultas PostgreSQL |
-| `cloudinary` | Subir y borrar imagenes desde el backend |
-| `multer` | Recibir archivos `multipart/form-data` para imagenes |
-| `multer-storage-cloudinary` | Dependencia instalada para storage Multer + Cloudinary; la implementacion actual usa `multer` en memoria y el SDK `cloudinary` directamente |
-| `nodemon` | Reiniciar servidor durante desarrollo |
-
-## Por que pnpm
-
-Este proyecto usa `pnpm` como package manager.
-
-Ventajas practicas:
-
-```txt
-instalaciones rapidas
-lockfile reproducible
-uso eficiente de disco
-scripts del proyecto se ejecutan con pnpm
-```
-
-El `package.json` declara la version esperada:
-
-```json
-{
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.1.2"
-    }
-  }
-}
-```
-
-Usa `pnpm install` para respetar `pnpm-lock.yaml`.
-
-## Requisitos
-
-Necesitas:
-
-```txt
-Node.js compatible con las dependencias del proyecto
-pnpm
-PostgreSQL
-una base de datos con las tablas que esperan los modelos
-cuenta Cloudinary si vas a subir o reemplazar imagenes
-```
-
-## Variables de entorno
-
-El archivo real debe crearse en:
-
-```txt
-ecommerce-sosaimpor-api/.env
-```
-
-El proyecto incluye una plantilla:
-
-```txt
-.env.example
-```
-
-Puedes crear `.env` copiando esa estructura.
-
-Ejemplo de `.env` con datos inventados:
-
-```env
-PORT=3003
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres_demo_123
-DB_NAME=ecommerce_sosaimpor_demo
-
-# Copia el valor real desde Cloudinary -> Variable de entorno API.
-# Formato: CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
-CLOUDINARY_URL=cloudinary://123456789012345:secreto_demo_no_real@mi_nube_demo
-```
-
-Significado:
-
-| Variable | Uso |
-| --- | --- |
-| `PORT` | Puerto del servidor Express |
-| `DB_HOST` | Host PostgreSQL |
-| `DB_PORT` | Puerto PostgreSQL, normalmente `5432` |
-| `DB_USER` | Usuario PostgreSQL |
-| `DB_PASSWORD` | Password PostgreSQL |
-| `DB_NAME` | Base de datos que usa la API |
-| `CLOUDINARY_URL` | Credencial server-side para subir y borrar imagenes Cloudinary |
-
-Seguridad:
-
-```txt
-no subas .env al repositorio
-no publiques CLOUDINARY_URL
-no pongas el API secret de Cloudinary en frontend
-```
-
-`.gitignore` ya ignora `.env` y `.env.*`, excepto `.env.example`.
-
-## Base de datos
-
-La API usa PostgreSQL.
-
-Antes de arrancar rutas reales:
-
-```txt
-1. crea la base de datos indicada en DB_NAME
-2. crea las tablas que espera la API
-3. confirma columnas usadas por los modelos y guias del modulo
-```
-
-Tablas usadas por los modulos actuales incluyen:
-
-```txt
-productos
-categorias
-producto_especificaciones
-producto_imagenes
-```
-
-Para imagenes admin la tabla debe incluir al menos:
-
-```txt
-imagen_url
-public_id
-principal
-orden
-creado_en
-```
-
-`public_id` permite limpiar el archivo real en Cloudinary cuando una imagen se reemplaza o elimina.
-
-## Instalar
-
-Desde la carpeta de la API:
-
+### 1️⃣ Clonar el repositorio y acceder
 ```bash
+git clone <url-del-repositorio>
 cd ecommerce-sosaimpor-api
+```
+
+### 2️⃣ Instalar dependencias con `pnpm`
+Este proyecto utiliza `pnpm` para una instalación ultrarrápida y un almacenamiento en caché eficiente:
+```bash
 pnpm install
 ```
 
-Si instalas dependencias manualmente para esta API, usa pnpm:
+### 3️⃣ Configurar las variables de entorno (`.env`)
+> [!WARNING]
+> El archivo `.env` contiene credenciales sensibles y **no se sube al repositorio** de Git por razones de seguridad. Está configurado en el `.gitignore`.
 
+Copia la plantilla de ejemplo para crear tu propio archivo `.env`:
 ```bash
-pnpm add nombre-paquete
+cp .env.example .env
 ```
 
-## Ejecutar en desarrollo
+Abre el archivo `.env` recién creado en la raíz del proyecto y configúralo con tus datos locales o de producción:
+```env
+PORT=3003
 
-Arranca con recarga usando Nodemon:
+# Configuración de base de datos PostgreSQL
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=tu_usuario
+DB_PASSWORD=tu_contraseña
+DB_NAME=ecommerce_sosaimpor
 
+# Token de seguridad para acceder a rutas de administración
+ADMIN_API_KEY=tu_token_secreto_super_seguro
+
+# Credenciales de Cloudinary
+# Formato: CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+CLOUDINARY_URL=cloudinary://123456789012345:secreto_real_aqui@mi_nube_cloudinary
+```
+
+### 4️⃣ Probar la conexión a la Base de Datos
+Antes de arrancar el servidor, puedes validar que tus credenciales de PostgreSQL sean correctas ejecutando:
+```bash
+pnpm db:test
+```
+
+### 5️⃣ Levantar el servidor de desarrollo
+Inicia el entorno de desarrollo que incluye recarga en caliente con `nodemon`:
 ```bash
 pnpm dev
 ```
 
-Por defecto, con:
-
-```env
-PORT=3003
-```
-
-la API queda en:
-
-```txt
-http://localhost:3003
-```
-
-Comprueba el healthcheck:
-
+El servidor estará escuchando en `http://localhost:3003`. Puedes verificar que todo está listo haciendo una consulta a la ruta de salud:
 ```http
 GET http://localhost:3003/health
 ```
-
-Respuesta esperada:
-
+**Respuesta esperada:**
 ```json
 {
   "ok": true,
@@ -327,143 +128,41 @@ Respuesta esperada:
 }
 ```
 
-## Ejecutar en modo start
+---
 
-Para levantar el proceso sin Nodemon:
+## ⚙️ Variables de Entorno Explicadas
 
-```bash
-pnpm start
-```
+| Variable | Descripción | Estado |
+| :--- | :--- | :--- |
+| `PORT` | Puerto en el que se levantará la API de Express. | Opcional (Default: 3000) |
+| `DB_HOST` | Dirección del host de la base de datos PostgreSQL. | **Requerido** |
+| `DB_PORT` | Puerto de PostgreSQL. | Opcional (Default: 5432) |
+| `DB_USER` | Usuario administrador de la base de datos. | **Requerido** |
+| `DB_PASSWORD` | Contraseña del usuario de la base de datos. | **Requerido** |
+| `DB_NAME` | Nombre de la base de datos de Sosaimpor. | **Requerido** |
+| `ADMIN_API_KEY` | Llave secreta para autorizar peticiones en el header `x-api-key`. | **Requerido en producción** |
+| `CLOUDINARY_URL` | String de configuración del SDK de Cloudinary para imágenes. | **Requerido para carga de imágenes** |
 
-Ese script ejecuta:
+---
 
-```txt
-node src/server.js
-```
+## 🛡️ Lista de Verificación antes de Producción
 
-## Probar conexion PostgreSQL
+* [ ] **CORS Restringido**: Asegúrate de cambiar `app.use(cors())` en [app.js](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/src/app.js) para que apunte al dominio del frontend real y no admita todas las peticiones externas (`*`).
+* [ ] **SSL en base de datos**: En servicios en la nube (como Supabase o Neon), define la variable de entorno `PGSSLMODE=require` para cifrar la conexión.
+* [ ] **ADMIN_API_KEY segura**: Define una clave larga y robusta que actúe como token para el panel de administración.
+* [ ] **Estructura SQL Completa**: Importa el archivo de migración necesario en PostgreSQL. Revisa [ESQUEMA_SUPABASE_TABLAS_E_INDICES.md](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/ESQUEMA_SUPABASE_TABLAS_E_INDICES.md).
 
-Con `.env` configurado:
+---
 
-```bash
-pnpm db:test
-```
+## 📚 Índice de Documentación Disponible
 
-Ese script intenta abrir la conexion a PostgreSQL y muestra si la DB responde.
+Para obtener detalles de payloads, modelos de respuesta y lógica de negocio por módulos, consulta:
 
-## Imagenes y Cloudinary
-
-La subida de imagenes admin usa:
-
-```txt
-POST /api/admin/productos/:productoId/imagenes
-```
-
-El archivo debe enviarse como:
-
-```txt
-multipart/form-data
-campo File: imagen
-```
-
-Cloudinary devuelve:
-
-```txt
-secure_url
-public_id
-```
-
-La API guarda:
-
-```txt
-secure_url -> imagen_url
-public_id  -> public_id
-```
-
-La guia completa de este flujo esta en:
-
-```txt
-documentacion/GUIA_COMPLETA_ADMIN_PRODUCTO_IMAGENES_Y_CLOUDINARY.md
-```
-
-## Scripts disponibles
-
-| Script | Comando | Uso |
-| --- | --- | --- |
-| Desarrollo | `pnpm dev` | Levanta API con Nodemon |
-| Start | `pnpm start` | Levanta API con Node |
-| Test DB | `pnpm db:test` | Prueba conexion PostgreSQL |
-
-## Primer arranque recomendado
-
-Si descargaste el proyecto por primera vez:
-
-```txt
-1. entra a ecommerce-sosaimpor-api
-2. ejecuta pnpm install
-3. crea .env usando .env.example como base
-4. crea o conecta la base PostgreSQL
-5. ejecuta pnpm db:test
-6. ejecuta pnpm dev
-7. visita GET /health
-8. prueba GET /api/productos
-```
-
-Para imagenes:
-
-```txt
-1. crea cuenta Cloudinary
-2. copia CLOUDINARY_URL a .env
-3. reinicia la API
-4. prueba las rutas documentadas de producto imagenes
-```
-
-## Respuestas JSON
-
-Las respuestas exitosas siguen este formato:
-
-```json
-{
-  "ok": true,
-  "data": {},
-  "pagination": null
-}
-```
-
-Los listados paginados agregan metadata:
-
-```json
-{
-  "ok": true,
-  "data": [],
-  "pagination": {
-    "page": 1,
-    "limit": 12,
-    "total": 0,
-    "totalPages": 0,
-    "hasNextPage": false,
-    "hasPrevPage": false
-  }
-}
-```
-
-Los errores pasan por el middleware central:
-
-```json
-{
-  "ok": false,
-  "message": "Descripcion del error"
-}
-```
-
-## Pendientes importantes
-
-Antes de produccion revisa:
-
-```txt
-autenticacion y rol admin para /api/admin
-variables reales en el hosting
-esquema PostgreSQL definitivo
-limites y formatos de imagen que deseas aceptar
-tests automatizados
-```
+| Guía y Ruta | Propósito |
+| :--- | :--- |
+| [Estructura y Tablas SQL](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/ESQUEMA_SUPABASE_TABLAS_E_INDICES.md) | Detalle del esquema y optimización de índices. |
+| [Productos Públicos](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/FILTRACION_Y_PAGINACION_PRODUCTOS.md) | Consulta, ordenamiento y paginación de catálogo. |
+| [Imágenes con Cloudinary](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/GUIA_COMPLETA_ADMIN_PRODUCTO_IMAGENES_Y_CLOUDINARY.md) | Subida, ordenación y eliminación de recursos multimedia. |
+| [Comentarios](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/GUIA_COMENTARIOS_PAGINA.md) | Moderación y listado de reseñas de productos. |
+| [Categorías Admin](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/GUIA_COMPLETA_ADMIN_CATEGORIAS.md) | Gestión interna y reglas de jerarquía de categorías. |
+| [Configuración General](file:///d:/Proyectos/proyectos-sosaimpor/ecommerce-sosaimpor-api/documentacion/GUIA_CONFIGURACION_ADMIN_Y_USUARIO.md) | Parámetros globales del e-commerce. |

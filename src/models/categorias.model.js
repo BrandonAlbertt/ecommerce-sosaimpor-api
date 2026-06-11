@@ -6,6 +6,7 @@ const categoriaSelectFields = `
   slug,
   descripcion,
   imagen_url,
+  imagen_public_id,
   color_hex,
   color_texto_hex,
   destacada,
@@ -39,6 +40,7 @@ const categoriaColumns = [
   "slug",
   "descripcion",
   "imagen_url",
+  "imagen_public_id",
   "color_hex",
   "color_texto_hex",
   "destacada",
@@ -106,6 +108,21 @@ export async function listarCategoriasAdminFiltradas(filters, pagination) {
     categorias: categoriasResult.rows,
     total,
   };
+}
+
+export async function obtenerResumenCategoriasAdmin() {
+  const result = await pool.query(
+    `
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE activa = true)::int AS activas,
+        COUNT(*) FILTER (WHERE activa = false)::int AS inactivas,
+        COUNT(*) FILTER (WHERE destacada = true)::int AS destacadas
+      FROM categorias
+    `
+  );
+
+  return result.rows[0];
 }
 
 export async function listarCategoriasDestacadas(limit = 8) {
@@ -252,4 +269,94 @@ export async function activarCategoriaAdmin(id) {
   }
 
   return obtenerCategoriaAdminPorId(id);
+}
+
+export async function eliminarCategoriaAdmin(id) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const categoriaResult = await client.query(
+      `
+        SELECT ${categoriaSelectFields}
+        FROM categorias
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    const categoria = categoriaResult.rows[0] || null;
+    if (!categoria) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const productosResult = await client.query(
+      "SELECT id FROM productos WHERE categoria_id = $1",
+      [id]
+    );
+    const productoIds = productosResult.rows.map((row) => row.id);
+
+    const productoImagenesResult = productoIds.length
+      ? await client.query(
+          `
+            SELECT public_id
+            FROM producto_imagenes
+            WHERE producto_id = ANY($1::int[])
+              AND public_id IS NOT NULL
+              AND BTRIM(public_id) <> ''
+          `,
+          [productoIds]
+        )
+      : { rows: [] };
+
+    if (productoIds.length) {
+      await client.query(
+        "DELETE FROM metricas_eventos_control WHERE tipo = $1 AND referencia_id = ANY($2::int[])",
+        ["producto", productoIds]
+      );
+      await client.query(
+        "DELETE FROM producto_metricas WHERE producto_id = ANY($1::int[])",
+        [productoIds]
+      );
+      await client.query(
+        "DELETE FROM producto_especificaciones WHERE producto_id = ANY($1::int[])",
+        [productoIds]
+      );
+      await client.query(
+        "DELETE FROM producto_imagenes WHERE producto_id = ANY($1::int[])",
+        [productoIds]
+      );
+      await client.query("DELETE FROM productos WHERE id = ANY($1::int[])", [
+        productoIds,
+      ]);
+    }
+
+    await client.query(
+      "DELETE FROM metricas_eventos_control WHERE tipo = $1 AND referencia_id = $2",
+      ["categoria", id]
+    );
+    await client.query("DELETE FROM categoria_metricas WHERE categoria_id = $1", [
+      id,
+    ]);
+    await client.query("DELETE FROM categorias WHERE id = $1", [id]);
+
+    await client.query("COMMIT");
+
+    return {
+      categoria,
+      productosEliminados: productoIds.length,
+      publicIds: [
+        categoria.imagen_public_id,
+        ...productoImagenesResult.rows.map((row) => row.public_id),
+      ].filter(Boolean),
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

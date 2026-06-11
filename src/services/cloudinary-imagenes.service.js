@@ -47,6 +47,20 @@ export async function subirImagenProductoCloudinary(file, productoId) {
   };
 }
 
+export async function subirImagenCategoriaCloudinary(file) {
+  validarConfiguracionCloudinary();
+
+  const result = await subirBufferACloudinary(file.buffer, {
+    folder: "sosaimpor/categorias",
+    resource_type: "image",
+  });
+
+  return {
+    imagen_url: result.secure_url,
+    public_id: result.public_id,
+  };
+}
+
 export async function eliminarImagenCloudinary(publicId) {
   if (!publicId) {
     return null;

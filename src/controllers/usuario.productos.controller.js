@@ -11,11 +11,13 @@ import { successResponse } from "../utils/response.js";
 export async function listarProductos(req, res, next) {
   try {
     // DEBUG: MUESTRA LA RUTA Y LOS PARAMETROS QUE LLEGAN POR QUERY.
+    /*
     console.log("[productos] Request recibida:", {
       method: req.method,
       path: req.originalUrl,
       query: req.query,
     });
+    */
 
     // LISTAR PRODUCTOS: LLAMA AL SERVICE QUE ARMAR FILTROS Y PAGINACION.
     const resultado = await obtenerProductos(req.query);
@@ -30,11 +32,13 @@ export async function listarProductos(req, res, next) {
 // DETALLE PUBLICO: RECIBE EL SLUG DE LA URL Y DEVUELVE UN PRODUCTO.
 export async function obtenerProductoPorSlugController(req, res, next) {
   try {
+    /*
     console.log("[productos] Request de detalle:", {
       method: req.method,
       path: req.originalUrl,
       slug: req.params.slug,
     });
+    */
 
     const producto = await obtenerProductoPorSlug(req.params.slug);
 
@@ -49,7 +53,7 @@ export async function obtenerProductoPorSlugController(req, res, next) {
 export async function listarFiltrosProductos(_req, res, next) {
   try {
     // OBTENER FILTROS: LLAMA AL SERVICE QUE CONSULTA OPCIONES UNICAS.
-    console.log("[productos] Request de opciones de filtros");
+    // console.log("[productos] Request de opciones de filtros");
 
     const filtros = await obtenerFiltrosProductos();
 

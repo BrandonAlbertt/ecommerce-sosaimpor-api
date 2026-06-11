@@ -9,6 +9,7 @@ import {
   vaciarComentariosPagina,
 } from "../models/comentario.model.js";
 import { obtenerConfiguracionTiendaActivaCompleta } from "../models/configuracion.model.js";
+import { getPagination } from "../utils/pagination.js";
 
 const SPAM_MESSAGE =
   "Ya recibimos tu sugerencia. Podr\u00e1s enviar otra m\u00e1s adelante.";
@@ -145,8 +146,22 @@ async function validarLimitesComentario(ipHash) {
   }
 }
 
-export async function obtenerComentariosAdmin() {
-  return listarComentariosPagina();
+export async function obtenerComentariosAdmin(query = {}) {
+  const pagination = getPagination(query);
+  const { comentarios, total } = await listarComentariosPagina(pagination);
+  const totalPages = Math.ceil(total / pagination.limit);
+
+  return {
+    data: comentarios,
+    pagination: {
+      page: pagination.page,
+      limit: pagination.limit,
+      total,
+      totalPages,
+      hasNextPage: pagination.page < totalPages,
+      hasPrevPage: pagination.page > 1,
+    },
+  };
 }
 
 export async function obtenerComentarioAdmin(id) {

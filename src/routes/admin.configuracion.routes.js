@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   actualizarConfiguracionAdminController,
+  actualizarEstadoConfiguracionAdminController,
   crearConfiguracionAdminController,
   eliminarConfiguracionAdminController,
   listarConfiguracionesAdminController,
@@ -11,6 +12,8 @@ const router = Router();
 
 // Lista todas las configuraciones registradas en admin.
 router.get("/", listarConfiguracionesAdminController);
+// Cambia solo el estado activo/inactivo. Si activa una, desactiva las demas.
+router.patch("/:id/estado", actualizarEstadoConfiguracionAdminController);
 // Obtiene una configuracion especifica por su id.
 router.get("/:id", obtenerConfiguracionAdminPorIdController);
 // Crea una nueva configuracion de tienda.

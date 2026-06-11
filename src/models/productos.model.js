@@ -459,7 +459,6 @@ export async function obtenerOpcionesFiltrosProductosAdmin() {
     pool.query(`
       SELECT DISTINCT c.id, c.nombre, c.slug, c.activa
       FROM categorias c
-      INNER JOIN productos p ON p.categoria_id = c.id
       ORDER BY c.nombre ASC
     `),
     pool.query(`
@@ -569,12 +568,9 @@ const adminSelectFields = `
   p.destacado,
   p.orden_destacado,
   COALESCE(pm.vistas, 0) AS vistas,
-  COALESCE(pm.clicks, 0) AS clicks,
-  COALESCE(pm.veces_favorito, 0) AS veces_favorito,
-  COALESCE(pm.veces_agregado_carrito, 0) AS veces_agregado_carrito,
-  COALESCE(pm.veces_comprado, 0) AS veces_comprado,
   p.activo,
   p.creado_en,
+  p.actualizado_en,
   (
     SELECT pi.imagen_url
     FROM producto_imagenes pi
@@ -587,6 +583,7 @@ const adminSelectFields = `
       SELECT json_agg(
         json_build_object(
           'id', pi.id,
+          'producto_id', pi.producto_id,
           'imagen_url', pi.imagen_url,
           'principal', pi.principal,
           'orden', pi.orden
@@ -603,6 +600,7 @@ const adminSelectFields = `
       SELECT json_agg(
         json_build_object(
           'id', pe.id,
+          'producto_id', pe.producto_id,
           'nombre', pe.nombre,
           'valor', pe.valor
         )
@@ -614,6 +612,22 @@ const adminSelectFields = `
     '[]'::json
   ) AS especificaciones
 `;
+
+const adminSortColumns = {
+  creado_en: "p.creado_en",
+  actualizado_en: "p.actualizado_en",
+  nombre: "p.nombre",
+  precio: "p.precio",
+  stock: "p.stock",
+  vistas: "COALESCE(pm.vistas, 0)",
+};
+
+function obtenerOrdenProductosAdmin(sort) {
+  const sortBy = adminSortColumns[sort?.sortBy] || adminSortColumns.creado_en;
+  const sortOrder = sort?.sortOrder === "ASC" ? "ASC" : "DESC";
+
+  return `ORDER BY ${sortBy} ${sortOrder}, p.id DESC`;
+}
 
 function agregarFiltrosAdmin(filters, values, where) {
   if (filters.activo !== null) {
@@ -710,7 +724,7 @@ function agregarFiltrosAdmin(filters, values, where) {
  * UTILIZA LOS MISMOS FILTROS QUE EL FRONTEND PERO INCLUYE CAMPOS ADICIONALES.
  * RETORNA PRODUCTOS CON INFORMACION COMPLETA INCLUYENDO ESTADO Y ORDEN.
  */
-export async function listarProductosAdminFiltrados(filters, pagination) {
+export async function listarProductosAdminFiltrados(filters, pagination, sort) {
   const values = [];
   const where = [];
 
@@ -733,6 +747,7 @@ export async function listarProductosAdminFiltrados(filters, pagination) {
   values.push(pagination.offset);
   const offsetIndex = values.length;
 
+  const orderSQL = obtenerOrdenProductosAdmin(sort);
   const dataQuery = `
     SELECT
       ${adminSelectFields}
@@ -740,7 +755,7 @@ export async function listarProductosAdminFiltrados(filters, pagination) {
     LEFT JOIN categorias c ON c.id = p.categoria_id
     LEFT JOIN producto_metricas pm ON pm.producto_id = p.id
     ${whereSQL}
-    ORDER BY p.creado_en DESC, p.id DESC
+    ${orderSQL}
     LIMIT $${limitIndex}
     OFFSET $${offsetIndex}
   `;
@@ -751,6 +766,28 @@ export async function listarProductosAdminFiltrados(filters, pagination) {
     productos: productosResult.rows,
     total,
   };
+}
+
+export async function obtenerResumenProductosAdmin() {
+  const result = await pool.query(`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE activo = true)::int AS activos,
+      COUNT(*) FILTER (WHERE activo = false)::int AS inactivos,
+      COUNT(*) FILTER (WHERE stock > 0 AND stock <= 5)::int AS stock_bajo,
+      COUNT(*) FILTER (WHERE stock = 0)::int AS sin_stock,
+      COUNT(*) FILTER (WHERE destacado = true)::int AS destacados,
+      COUNT(*) FILTER (
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM producto_imagenes pi
+          WHERE pi.producto_id = productos.id
+        )
+      )::int AS sin_imagen
+    FROM productos
+  `);
+
+  return result.rows[0];
 }
 
 /**
@@ -801,6 +838,7 @@ const adminProductColumns = [
   "destacado",
   "orden_destacado",
   "activo",
+  "creado_en",
 ];
 
 /**
@@ -851,7 +889,8 @@ export async function actualizarProductoAdmin(id, data) {
   const result = await pool.query(
     `
       UPDATE productos
-      SET ${setSQL}
+      SET ${setSQL},
+          actualizado_en = NOW()
       WHERE id = $${values.length}
       RETURNING id
     `,
@@ -872,7 +911,7 @@ export async function actualizarProductoAdmin(id, data) {
  */
 export async function desactivarProductoAdmin(id) {
   const result = await pool.query(
-    "UPDATE productos SET activo = false WHERE id = $1 RETURNING id",
+    "UPDATE productos SET activo = false, actualizado_en = NOW() WHERE id = $1 RETURNING id",
     [id]
   );
 
@@ -890,7 +929,7 @@ export async function desactivarProductoAdmin(id) {
  */
 export async function activarProductoAdmin(id) {
   const result = await pool.query(
-    "UPDATE productos SET activo = true WHERE id = $1 RETURNING id",
+    "UPDATE productos SET activo = true, actualizado_en = NOW() WHERE id = $1 RETURNING id",
     [id]
   );
 
@@ -899,4 +938,53 @@ export async function activarProductoAdmin(id) {
   }
 
   return obtenerProductoAdminPorId(id);
+}
+
+/**
+ * ELIMINAR: BORRA DEFINITIVAMENTE UN PRODUCTO Y SUS DATOS RELACIONADOS.
+ * LAS TABLAS CON FK TIENEN ON DELETE CASCADE, PERO SE LIMPIAN EXPLICITAMENTE
+ * PARA CUBRIR BASES EXISTENTES QUE NO TENGAN LA REGLA ACTUALIZADA.
+ */
+export async function eliminarProductoAdmin(id) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const productoResult = await client.query(
+      `
+        SELECT
+          ${adminSelectFields}
+        FROM productos p
+        LEFT JOIN categorias c ON c.id = p.categoria_id
+        LEFT JOIN producto_metricas pm ON pm.producto_id = p.id
+        WHERE p.id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    const producto = productoResult.rows[0] || null;
+    if (!producto) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    await client.query(
+      "DELETE FROM metricas_eventos_control WHERE tipo = $1 AND referencia_id = $2",
+      ["producto", id]
+    );
+    await client.query("DELETE FROM producto_metricas WHERE producto_id = $1", [id]);
+    await client.query("DELETE FROM producto_especificaciones WHERE producto_id = $1", [id]);
+    await client.query("DELETE FROM producto_imagenes WHERE producto_id = $1", [id]);
+    await client.query("DELETE FROM productos WHERE id = $1", [id]);
+
+    await client.query("COMMIT");
+    return producto;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

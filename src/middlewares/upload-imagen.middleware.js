@@ -44,3 +44,8 @@ export const subirImagenProducto = [
   multerImagen.single("imagen"),
   manejarErrorMulter,
 ];
+
+export const subirImagenCategoria = [
+  multerImagen.single("imagen"),
+  manejarErrorMulter,
+];

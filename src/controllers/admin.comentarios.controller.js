@@ -7,10 +7,10 @@ import {
 } from "../services/comentario.service.js";
 import { successResponse } from "../utils/response.js";
 
-export async function listarComentariosAdminController(_req, res, next) {
+export async function listarComentariosAdminController(req, res, next) {
   try {
-    const comentarios = await obtenerComentariosAdmin();
-    res.json(successResponse(comentarios));
+    const resultado = await obtenerComentariosAdmin(req.query);
+    res.json(successResponse(resultado.data, resultado.pagination));
   } catch (error) {
     next(error);
   }
