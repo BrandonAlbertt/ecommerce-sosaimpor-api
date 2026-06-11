@@ -15,6 +15,7 @@ dotenv.config({
 });
 
 const { Pool } = pg;
+const sslEnabled = String(process.env.DB_SSL || "").toLowerCase() === "true";
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -23,6 +24,7 @@ const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
+  ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
 };
 
 // POOL COMPARTIDO: LO USA TODA LA API PARA CONSULTAR LA BASE DE DATOS.
@@ -37,6 +39,7 @@ export async function testDbConnection() {
     database: dbConfig.database,
     user: dbConfig.user,
     password: dbConfig.password ? "[hidden]" : undefined,
+    ssl: sslEnabled,
   });
 
   const result = await pool.query("SELECT NOW() AS server_time");
